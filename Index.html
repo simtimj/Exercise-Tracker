@@ -93,6 +93,7 @@
 
     @media (min-width: 900px) {
       #groups { grid-template-columns: 1fr 1fr; }
+      #groups table.wide { grid-column: 1 / -1; }
     }
 
     table.section {
@@ -161,6 +162,8 @@
 
     .log button:disabled { opacity: 0.5; }
 
+    .pill.none { background: var(--muted); }
+
     .pill {
       display: inline-block;
       min-width: 56px;
@@ -183,22 +186,21 @@
   </header>
 
   <div class="controls">
-    <button data-sort="ready" class="active">Ready first</button>
-    <button data-sort="sheet">Sheet order</button>
+    <button data-sort="category" class="active">Category</button>
+    <button data-sort="days">Days since</button>
   </div>
 
-  <div class="legend"><span>Just trained</span><div class="bar"></div><span>Ready (30+ = long overdue)</span></div>
+  <div class="legend"><span>Just trained</span><div class="bar"></div><span>Recovered</span></div>
 
   <div id="groups"></div>
 
   <script>
-    const MAX_DAYS = 30; // anything this old (or with no date) shows as "30+"
     let data = null;
-    let sortMode = 'ready';
+    let sortMode = 'category';
 
-    // Apps Script turns null into undefined; treat missing dates as 30+.
+    // Apps Script turns null into undefined; no date → null.
     function effectiveDays(n) {
-      return (n === null || n === undefined || isNaN(n)) ? MAX_DAYS : Math.min(n, MAX_DAYS);
+      return (n == null || isNaN(n)) ? null : n;
     }
 
     // 0 = just trained (red) → 1+ = recovered (green).
@@ -210,16 +212,12 @@
     }
 
     function daysLabel(n) {
-      if (n >= MAX_DAYS) return MAX_DAYS + '+ days';
+      if (n == null) return 'no date';
       if (n === 0) return 'today';
       if (n === 1) return '1 day';
       return n + ' days';
     }
 
-    // Most overdue first: how far past its recovery time, then sheet order.
-    function readiness(ex) {
-      return ex.days / ex.recoveryDays;
-    }
 
     function el(tag, cls, text) {
       const node = document.createElement(tag);
@@ -289,11 +287,17 @@
       const wrap = document.getElementById('groups');
       wrap.innerHTML = '';
 
-      buildSections().forEach(sec => {
-        const exercises = sec.exercises.slice();
-        if (sortMode === 'ready') exercises.sort((a, b) => readiness(b) - readiness(a) || a.row - b.row);
+      let sections = buildSections();
+      if (sortMode === 'days') {
+        // One list, most days since first; exercises with no date at the bottom.
+        const all = [].concat(...sections.map(s => s.exercises));
+        all.sort((a, b) => (b.days == null ? -1 : b.days) - (a.days == null ? -1 : a.days) || a.row - b.row);
+        sections = [{ name: 'All — longest since first', exercises: all, wide: true }];
+      }
 
-        const table = el('table', 'section');
+      sections.forEach(sec => {
+        const exercises = sec.exercises;
+        const table = el('table', sec.wide ? 'section wide' : 'section');
         const head = table.createTHead().insertRow();
         const th = el('th');
         th.colSpan = 2;
@@ -307,6 +311,7 @@
           const main = row.insertCell();
           main.append(el('div', 'ex-name', ex.name));
           const meta = el('div', 'ex-meta');
+          if (sortMode === 'days' && ex.section) meta.append(el('span', 'tag', ex.section.split(' (')[0]));
           meta.append(el('span', 'tag', ex.group));
           const detail = [ex.dateText, (ex.sets || []).slice(0, 3).join(' / ')].filter(Boolean).join(' · ');
           if (detail) meta.append(document.createTextNode(detail));
@@ -314,8 +319,8 @@
 
           const cell = row.insertCell();
           cell.className = 'days';
-          const pill = el('span', 'pill', daysLabel(ex.days));
-          pill.style.setProperty('--heat', heatColor(ex.days, ex.recoveryDays));
+          const pill = el('span', ex.days == null ? 'pill none' : 'pill', daysLabel(ex.days));
+          if (ex.days != null) pill.style.setProperty('--heat', heatColor(ex.days, ex.recoveryDays));
           cell.append(pill);
         });
 
