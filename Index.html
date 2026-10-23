@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 16px;
+    }
+
+    table {
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    td,
+    th {
+      border: 1px solid #ccc;
+      padding: 4px 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>Exercise Tracker</h2>
+  <div id="status">Loading…</div>
+  <table id="data"></table>
+  <script>
+    google.script.run
+      .withSuccessHandler(rows => {
+        document.getElementById('status').textContent = rows.length + ' rows loaded';
+        const table = document.getElementById('data');
+        rows.slice(0, 10).forEach((row, i) => {
+          const tr = table.insertRow();
+          row.forEach(cell => {
+            const el = document.createElement(i === 0 ? 'th' : 'td');
+            el.textContent = cell;
+            tr.appendChild(el);
+          });
+        });
+      })
+      .withFailureHandler(err => {
+        document.getElementById('status').textContent = 'Error: ' + err.message;
+      })
+      .getSheetData();
+  </script>
+</body>
+
+</html>
