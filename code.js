@@ -241,7 +241,57 @@ function writeDateKeepingLinks(cell, today) {
   cell.setRichTextValue(builder.build());
 }
 
+// ---------- App notes (temporary "Notes" side panel) ----------
+// Stored in a Google Doc ("Exercise Tracker – App notes") so Claude can read
+// them through the Drive connector. One paragraph per note; the first
+// paragraph is the doc's title line and is skipped.
+
+const NOTES_DOC_ID = '1223RvTJ4CyVsHe-AIpii5X8tj42lwDH-aJ4rhCIMG8g';
+
+function notesFrom(texts) {
+  return texts
+    .map((text, i) => ({ i: i, text: String(text || '').trim() }))
+    .filter(n => n.i > 0 && n.text);
+}
+
+function getNotes() {
+  const body = DocumentApp.openById(NOTES_DOC_ID).getBody();
+  return notesFrom(body.getParagraphs().map(p => p.getText()));
+}
+
+function addNote(text) {
+  text = String(text || '').trim();
+  if (!text) return getNotes();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    DocumentApp.openById(NOTES_DOC_ID).getBody().appendParagraph(dateLabel(new Date()) + ' — ' + text);
+  } finally {
+    lock.releaseLock();
+  }
+  return getNotes();
+}
+
+// i = paragraph index from getNotes(); text guards against the doc changing.
+function removeNote(i, text) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const body = DocumentApp.openById(NOTES_DOC_ID).getBody();
+    const paras = body.getParagraphs();
+    const p = paras[i];
+    if (!p || i === 0 || p.getText().trim() !== String(text).trim()) {
+      throw new Error('Notes changed. Reopen the panel and try again.');
+    }
+    if (i === paras.length - 1) p.setText(''); // a doc can't lose its last paragraph
+    else p.removeFromParent();
+  } finally {
+    lock.releaseLock();
+  }
+  return getNotes();
+}
+
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, replaceDateText, buildSetCells, planFor };
+  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, replaceDateText, buildSetCells, planFor, notesFrom };
 }

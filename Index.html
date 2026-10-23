@@ -192,6 +192,66 @@
     tr.ex-row.done td { opacity: 0.55; }
     .ex-note { font-size: 12px; font-style: italic; margin-top: 2px; }
 
+    /* Labelled boxes under each exercise: Last done, Prev, Prev 2. */
+    .box {
+      display: inline-block;
+      padding: 1px 6px;
+      margin: 2px 4px 0 0;
+      border: 1px solid currentColor;
+      border-radius: 4px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .box b { font-weight: 600; }
+    .box-line { margin-top: 2px; }
+
+    header .notes-btn {
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    /* Notes side panel slides in from the right. */
+    #notes-shade {
+      position: fixed; inset: 0; background: rgb(0 0 0 / 0.3);
+      opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    #notes-panel {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: min(360px, 88vw);
+      background: var(--card); color: var(--text);
+      border-left: 1px solid var(--border);
+      padding: 16px; overflow-y: auto;
+      transform: translateX(100%); transition: transform 0.2s;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    body.notes-open #notes-shade { opacity: 1; pointer-events: auto; }
+    body.notes-open #notes-panel { transform: none; }
+    #notes-panel .panel-head { display: flex; justify-content: space-between; align-items: center; }
+    #notes-panel h2 { font-size: 17px; margin: 0; }
+    #notes-panel textarea {
+      width: 100%; min-height: 70px; padding: 8px;
+      font: inherit; font-size: 16px;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--text);
+    }
+    #notes-panel button {
+      padding: 6px 12px; font-size: 14px;
+      border: 1px solid var(--text); border-radius: 6px;
+      background: var(--card); color: var(--text);
+    }
+    #notes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    #notes-list li {
+      display: flex; gap: 8px; align-items: flex-start;
+      padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px;
+    }
+    #notes-list li span { flex: 1; overflow-wrap: anywhere; }
+    #notes-list li button { padding: 0 8px; border-color: var(--border); }
+    #notes-status { font-size: 12px; color: var(--muted); }
+
     .pill {
       display: inline-block;
       min-width: 56px;
@@ -211,6 +271,7 @@
   <header>
     <h1>Exercise Tracker</h1>
     <div id="status">Loading…</div>
+    <button class="notes-btn" id="notes-open" type="button">Notes</button>
   </header>
 
   <div class="controls">
@@ -223,6 +284,20 @@
   <div class="legend"><span>Just trained</span><div class="bar"></div><span>Recovered</span></div>
 
   <div id="groups"></div>
+
+  <div id="notes-shade"></div>
+  <aside id="notes-panel" aria-label="App notes">
+    <div class="panel-head">
+      <h2>App notes</h2>
+      <button type="button" id="notes-close">Close</button>
+    </div>
+    <form id="notes-form">
+      <textarea id="notes-input" placeholder="Change to make in the app…"></textarea>
+      <button type="submit">Add note</button>
+    </form>
+    <div id="notes-status"></div>
+    <ul id="notes-list"></ul>
+  </aside>
 
   <script>
     let data = null;
@@ -364,6 +439,35 @@
       return form;
     }
 
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    function box(label, value) {
+      const b = el('span', 'box');
+      b.append(el('b', '', label + ': '), document.createTextNode(value));
+      return b;
+    }
+
+    // "9/22 Tues | wk4/5" → Last done: 9/22 Tues · Sep wk 4/5, then the
+    // last two logs as Prev / Prev 2 (column D is newest).
+    function historyLine(ex) {
+      const line = el('div', 'ex-meta box-line');
+      const text = String(ex.dateText || '');
+      const [datePart, ...rest] = text.split('|').map(t => t.trim());
+      if (!ex.noDate) {
+        line.append(box('Last done', datePart));
+        const extra = rest.join(' | ');
+        const wk = extra.match(/^wk\s*(\d)\s*\/\s*(\d)$/i);
+        if (wk) line.append(box(MONTHS[Number(ex.lastDate.slice(5, 7)) - 1] + ' wk', wk[1] + ' of ' + wk[2]));
+        else if (extra && extra !== 'i') line.append(document.createTextNode(extra + ' '));
+      } else if (text.trim() && text.trim() !== 'i') {
+        line.append(document.createTextNode(text.trim() + ' '));
+      }
+      const sets = (ex.sets || []).map(s => s.replace(/\s+/g, ' ').replace(/[,.\s]+$/, '')).filter(Boolean);
+      if (sets[0]) line.append(box('Prev', sets[0]));
+      if (sets[1]) line.append(box('Prev 2', sets[1]));
+      return line.childNodes.length ? line : null;
+    }
+
     function isDoneToday(ex) {
       return !ex.noDate && ex.lastDate === data.today;
     }
@@ -462,9 +566,9 @@
             const target = [ex.plan.target, ex.plan.weight].filter(Boolean).join(' @ ');
             meta.append(el('span', 'tag', doneToday ? '✓ done' : 'Plan' + (target ? ': ' + target : '')));
           }
-          const detail = [ex.dateText, (ex.sets || []).slice(0, 3).join(' / ')].filter(Boolean).join(' · ');
-          if (detail) meta.append(document.createTextNode(detail));
           main.append(meta);
+          const history = historyLine(ex);
+          if (history) main.append(history);
           if (ex.plan && ex.plan.note) main.append(el('div', 'ex-note', ex.plan.note));
           main.append(logBox(ex));
 
@@ -486,6 +590,54 @@
         document.querySelectorAll('.controls button').forEach(b => b.classList.toggle('active', b === btn));
         if (data) render();
       });
+    });
+
+    // ---------- Notes panel ----------
+    const notesStatus = t => { document.getElementById('notes-status').textContent = t; };
+
+    function renderNotes(notes) {
+      const list = document.getElementById('notes-list');
+      list.innerHTML = '';
+      notesStatus(notes.length ? notes.length + ' note' + (notes.length === 1 ? '' : 's') : 'No notes yet.');
+      notes.slice().reverse().forEach(n => {
+        const li = el('li');
+        const del = el('button', '', '✕');
+        del.type = 'button';
+        del.title = 'Remove';
+        del.addEventListener('click', () => {
+          if (!confirm('Remove this note?')) return;
+          notesStatus('Removing…');
+          google.script.run.withSuccessHandler(renderNotes)
+            .withFailureHandler(err => notesStatus('Error: ' + err.message))
+            .removeNote(n.i, n.text);
+        });
+        li.append(el('span', '', n.text), del);
+        list.append(li);
+      });
+    }
+
+    function openNotes() {
+      document.body.classList.add('notes-open');
+      notesStatus('Loading…');
+      google.script.run.withSuccessHandler(renderNotes)
+        .withFailureHandler(err => notesStatus('Error: ' + err.message))
+        .getNotes();
+    }
+
+    const closeNotes = () => document.body.classList.remove('notes-open');
+    document.getElementById('notes-open').addEventListener('click', openNotes);
+    document.getElementById('notes-close').addEventListener('click', closeNotes);
+    document.getElementById('notes-shade').addEventListener('click', closeNotes);
+    document.getElementById('notes-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const input = document.getElementById('notes-input');
+      const text = input.value.trim();
+      if (!text) return;
+      notesStatus('Saving…');
+      google.script.run
+        .withSuccessHandler(notes => { input.value = ''; renderNotes(notes); })
+        .withFailureHandler(err => notesStatus('Error: ' + err.message))
+        .addNote(text);
     });
 
     google.script.run
