@@ -151,6 +151,16 @@
       color: var(--text);
     }
 
+    tr.sub td {
+      background: var(--bg);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border-top: 2px solid var(--text);
+    }
+
     .empty { color: var(--muted); text-align: center; padding: 24px 0; grid-column: 1 / -1; }
 
     .log input.weight { flex: 0 0 5.5em; }
@@ -278,6 +288,15 @@
     }
 
     // Flatten groups into sections (PT, Compound, Iso…) in sheet order.
+    // Three top categories; the sheet's Abs section lives under Isolation.
+    function categoryOf(section) {
+      const s = String(section || '');
+      if (/^pt\b/i.test(s)) return 'PT';
+      if (/compound/i.test(s)) return 'Compound';
+      if (/abs|isolation/i.test(s)) return 'Isolation';
+      return s.split(' (')[0] || 'Other';
+    }
+
     function buildSections() {
       const all = [];
       data.groups.forEach(g => g.exercises.forEach(ex =>
@@ -288,7 +307,8 @@
       const sections = [];
       const byName = {};
       all.forEach(ex => {
-        const name = ex.section || 'Other';
+        ex.category = categoryOf(ex.section);
+        const name = ex.category;
         if (!byName[name]) {
           byName[name] = { name, exercises: [] };
           sections.push(byName[name]);
@@ -374,13 +394,30 @@
         head.append(th);
 
         const body = table.createTBody();
-        exercises.forEach(ex => {
+        // Category view: subheadings per muscle group (column A), groups in sheet order.
+        let list = exercises;
+        if (sortMode === 'category') {
+          const order = [];
+          exercises.forEach(ex => { if (!order.includes(ex.group)) order.push(ex.group); });
+          list = order.flatMap(g => exercises.filter(ex => ex.group === g));
+        }
+        let lastGroup = null;
+        list.forEach(ex => {
+          if (sortMode === 'category' && ex.group !== lastGroup) {
+            lastGroup = ex.group;
+            const groupRows = list.filter(e => e.group === ex.group);
+            const sub = body.insertRow();
+            sub.className = 'sub';
+            const c = sub.insertCell();
+            c.colSpan = 2;
+            c.append(el('span', '', ex.group),
+              el('span', 'section-count', groupRows.filter(doneThisWeek).length + ' / ' + groupRows.length));
+          }
           const row = body.insertRow();
           const main = row.insertCell();
           main.append(el('div', 'ex-name', ex.name));
           const meta = el('div', 'ex-meta');
-          if (sortMode !== 'category' && ex.section) meta.append(el('span', 'tag', ex.section.split(' (')[0]));
-          meta.append(el('span', 'tag', ex.group));
+          if (sortMode !== 'category') meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
           const detail = [ex.dateText, (ex.sets || []).slice(0, 3).join(' / ')].filter(Boolean).join(' · ');
           if (detail) meta.append(document.createTextNode(detail));
           main.append(meta, logBox(ex));
