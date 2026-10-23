@@ -48,6 +48,11 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 - `planFor()` in `code.js` only returns the plan when `date` is today, so old plans disappear by themselves. Items are matched by row + name, falling back to name if rows moved.
 - The plan itself is never written to the sheet. Tapping Log on a planned row uses `logExercise()` (confirmed format above), which is what lands in the sheet.
 
+## Shortcuts
+
+- "Ship it": make the change, test it (`node -e` / `node --check`), commit and push to `main`, wait for the deploy run to pass, then show Julius what changed.
+- "Stage it": describe the change for review before pushing.
+
 ## Conventions
 
 - Mobile-first layout (mostly used on a phone).
