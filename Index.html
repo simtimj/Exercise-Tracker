@@ -80,32 +80,45 @@
       background: linear-gradient(to right, hsl(0 75% 50%), hsl(30 85% 50%), hsl(55 85% 48%), hsl(120 55% 42%));
     }
 
-    .group {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-left: 8px solid var(--heat);
-      border-radius: 10px;
-      margin-bottom: 10px;
-      overflow: hidden;
-    }
+    .section { margin-bottom: 24px; }
 
-    .group summary {
-      list-style: none;
+    .section-head {
       display: flex;
-      align-items: center;
+      align-items: baseline;
       justify-content: space-between;
       gap: 8px;
-      padding: 12px;
-      cursor: pointer;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--text);
     }
 
-    .group summary::-webkit-details-marker { display: none; }
+    .section-name { font-size: 17px; font-weight: 700; margin: 0; }
+    .section-count { font-size: 12px; color: var(--muted); }
 
-    .gname { font-weight: 600; font-size: 16px; }
-    .gsub { font-size: 12px; color: var(--muted); }
+    .ex {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 4px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .ex-main { flex: 1; min-width: 0; }
+    .ex-name { font-size: 15px; }
+    .ex-meta { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+
+    .tag {
+      display: inline-block;
+      padding: 1px 6px;
+      margin-right: 4px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      font-size: 11px;
+    }
 
     .pill {
       flex-shrink: 0;
+      min-width: 64px;
+      text-align: center;
       padding: 4px 10px;
       border-radius: 999px;
       background: var(--heat);
@@ -114,28 +127,6 @@
       font-weight: 600;
       white-space: nowrap;
     }
-
-    .ex {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 10px 12px;
-      border-top: 1px solid var(--border);
-    }
-
-    .dot {
-      flex-shrink: 0;
-      width: 12px;
-      height: 12px;
-      margin-top: 4px;
-      border-radius: 50%;
-      background: var(--heat);
-    }
-
-    .ex-main { flex: 1; min-width: 0; }
-    .ex-name { font-size: 15px; }
-    .ex-meta { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
-    .ex-days { font-size: 13px; color: var(--muted); white-space: nowrap; }
   </style>
 </head>
 
@@ -176,8 +167,8 @@
     }
 
     // Unknown dates sort as most ready, then by how far past recovery.
-    function readiness(g) {
-      return g.daysSince === null ? Infinity : g.daysSince / g.recoveryDays;
+    function readiness(ex) {
+      return ex.daysSince === null ? Infinity : ex.daysSince / ex.recoveryDays;
     }
 
     function el(tag, cls, text) {
@@ -187,39 +178,57 @@
       return node;
     }
 
+    // Flatten groups into sections (PT, Compound, Iso…) in sheet order.
+    function buildSections() {
+      const all = [];
+      data.groups.forEach(g => g.exercises.forEach(ex =>
+        all.push(Object.assign({ group: g.name, recoveryDays: g.recoveryDays }, ex))));
+      all.sort((a, b) => a.row - b.row);
+
+      const sections = [];
+      const byName = {};
+      all.forEach(ex => {
+        const name = ex.section || 'Other';
+        if (!byName[name]) {
+          byName[name] = { name, exercises: [] };
+          sections.push(byName[name]);
+        }
+        byName[name].exercises.push(ex);
+      });
+      return sections;
+    }
+
     function render() {
       const wrap = document.getElementById('groups');
       wrap.innerHTML = '';
-      const groups = data.groups.slice();
-      if (sortMode === 'ready') groups.sort((a, b) => readiness(b) - readiness(a));
 
-      groups.forEach(g => {
-        const details = el('details', 'group');
-        details.style.setProperty('--heat', heatColor(g.daysSince, g.recoveryDays));
+      buildSections().forEach(sec => {
+        const exercises = sec.exercises.slice();
+        if (sortMode === 'ready') exercises.sort((a, b) => readiness(b) - readiness(a));
 
-        const summary = el('summary');
-        const left = el('div');
-        left.append(el('div', 'gname', g.name));
-        const ready = g.daysSince !== null && g.daysSince >= g.recoveryDays;
-        left.append(el('div', 'gsub',
-          `${g.exercises.length} exercise${g.exercises.length === 1 ? '' : 's'} · recovers in ${g.recoveryDays}d` +
-          (ready ? ' · ready' : '')));
-        summary.append(left, el('span', 'pill', daysLabel(g.daysSince)));
-        details.append(summary);
+        const section = el('section', 'section');
+        const head = el('div', 'section-head');
+        head.append(el('h2', 'section-name', sec.name),
+          el('span', 'section-count', exercises.length + ' exercises'));
+        section.append(head);
 
-        g.exercises.forEach(ex => {
+        exercises.forEach(ex => {
           const row = el('div', 'ex');
-          const dot = el('span', 'dot');
-          dot.style.setProperty('--heat', heatColor(ex.daysSince, g.recoveryDays));
           const main = el('div', 'ex-main');
           main.append(el('div', 'ex-name', ex.name));
-          const meta = [ex.dateText, ex.sets.join(' / ')].filter(Boolean).join(' · ');
-          if (meta) main.append(el('div', 'ex-meta', meta));
-          row.append(dot, main, el('span', 'ex-days', daysLabel(ex.daysSince)));
-          details.append(row);
+          const meta = el('div', 'ex-meta');
+          meta.append(el('span', 'tag', ex.group));
+          const detail = [ex.dateText, ex.sets.join(' / ')].filter(Boolean).join(' · ');
+          if (detail) meta.append(document.createTextNode(detail));
+          main.append(meta);
+
+          const pill = el('span', 'pill', daysLabel(ex.daysSince));
+          pill.style.setProperty('--heat', heatColor(ex.daysSince, ex.recoveryDays));
+          row.append(main, pill);
+          section.append(row);
         });
 
-        wrap.append(details);
+        wrap.append(section);
       });
     }
 
@@ -235,8 +244,7 @@
       .withSuccessHandler(result => {
         data = result;
         const count = result.groups.reduce((n, g) => n + g.exercises.length, 0);
-        document.getElementById('status').textContent =
-          `${result.groups.length} groups · ${count} exercises`;
+        document.getElementById('status').textContent = `${count} exercises`;
         render();
       })
       .withFailureHandler(err => {

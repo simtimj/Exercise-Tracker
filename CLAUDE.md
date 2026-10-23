@@ -12,7 +12,7 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 ## Files
 
 - `code.js` — server side: `doGet()` serves `Index`; `getSheetData()` returns the tab's display values; `getTrackerData()` → `parseRows()` returns groups (column A, carried down to blank-A rows) with exercises, last-trained date and days since. `RECOVERY_DAYS` is the per-group recovery config (placeholder values). Exports for Node so the parser can be tested locally with `node -e`.
-- `Index.html` — client UI; calls server functions via `google.script.run`. Group cards colored by heat (daysSince / recoveryDays, red → green; grey = no date), tap to expand exercises; sort "Ready first" or sheet order.
+- `Index.html` — client UI; calls server functions via `google.script.run`. Laid out as sections (from the sheet's section label rows: PT, Compound, Iso…), each a heading with a rule under it and table-style exercise rows: name, muscle-group tag, date text/sets, and a heat-colored days pill (daysSince / recoveryDays, red → green; grey = no date). Sort "Ready first" (within each section) or sheet order.
 - `appsscript.json` — V8, America/Los_Angeles, web app executes as the deploying user, access MYSELF.
 
 ## Source sheet
