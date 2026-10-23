@@ -151,6 +151,8 @@
       color: var(--text);
     }
 
+    .log input.weight { flex: 0 0 5.5em; }
+
     .log button {
       padding: 5px 12px;
       font-size: 14px;
@@ -227,6 +229,44 @@
     }
 
 
+    // Week runs Monday–Sunday.
+    function weekStartIso() {
+      const [y, m, d] = data.today.split('-').map(Number);
+      const t = new Date(y, m - 1, d);
+      t.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+      return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+    }
+
+    function doneThisWeek(ex) {
+      return !ex.noDate && ex.lastDate >= weekStartIso();
+    }
+
+    // Weight = the leading part of a log entry when it has letters,
+    // e.g. "25lbs, 30, 25" → "25lbs", "20lbx2,  18" → "20lbx2", "thk red. 40" → "thk red".
+    function weightOf(entry) {
+      const head = String(entry || '').split(/,|\.\s/)[0].trim().replace(/\.$/, '');
+      return /[a-z]/i.test(head) ? head : '';
+    }
+
+    function baseName(name) {
+      return String(name).replace(/[.\s]+$/, '').replace(/\.?\s+\d.*$/, '').trim().toLowerCase();
+    }
+
+    // Last weight used: newest entry in this row, else any row of the same exercise.
+    function lastWeight(ex) {
+      const fromRow = list => (list || []).map(weightOf).find(Boolean) || '';
+      const own = fromRow(ex.sets);
+      if (own) return own;
+      const key = baseName(ex.name);
+      for (const g of data.groups) for (const other of g.exercises) {
+        if (baseName(other.name) === key) {
+          const w = fromRow(other.sets);
+          if (w) return w;
+        }
+      }
+      return '';
+    }
+
     function el(tag, cls, text) {
       const node = document.createElement(tag);
       if (cls) node.className = cls;
@@ -258,15 +298,21 @@
     // One box per exercise: type sets like "15,15,15", tap Log.
     function logBox(ex) {
       const form = el('form', 'log');
+      const weight = el('input', 'weight');
+      weight.placeholder = 'Weight';
+      weight.value = lastWeight(ex);
       const input = el('input');
       input.placeholder = 'Sets, e.g. 15,15,15';
       input.enterKeyHint = 'done';
       const btn = el('button', '', 'Log');
       btn.type = 'submit';
-      form.append(input, btn);
+      form.append(weight, input, btn);
       form.addEventListener('submit', e => {
         e.preventDefault();
-        const entry = input.value.trim();
+        let w = weight.value.trim();
+        if (/^\d+(\.\d+)?$/.test(w)) w += 'lbs'; // plain number → pounds
+        const sets = input.value.trim();
+        const entry = sets ? [w, sets].filter(Boolean).join(', ') : '';
         if (!entry && !confirm('Mark "' + ex.name + '" done today with no sets?')) return;
         btn.disabled = true;
         btn.textContent = '…';
@@ -310,7 +356,8 @@
         const th = el('th');
         th.colSpan = 2;
         th.append(el('span', 'section-name', sec.name),
-          el('span', 'section-count', exercises.length + ' exercises'));
+          el('span', 'section-count',
+            exercises.filter(doneThisWeek).length + ' / ' + exercises.length + ' done this week'));
         head.append(th);
 
         const body = table.createTBody();

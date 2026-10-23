@@ -76,22 +76,29 @@ function parseRows(rows, today) {
   const byName = {};
   let section = '';
   let currentGroup = '';
+  let prevBlank = true; // row 2 counts as following a blank
 
   rows.slice(1).forEach((row, i) => {
     const cells = row.map(v => String(v || '').trim());
     const [a, b, c] = cells;
     const sets = cells.slice(3).filter(Boolean); // D onward, newest first
-    if (!a && !b && !c && !sets.length) return;
+    const blank = !a && !b && !c && !sets.length;
+    const afterBlank = prevBlank;
+    prevBlank = blank;
+    if (blank) return;
 
-    // Section label rows (e.g. "PT (Try one …)"): no group, only a title in C.
-    if (!a && c && !b && !sets.length) {
+    // Section label rows (e.g. "PT (Try one …)"): only a title in C, right
+    // after an empty row. Name-only rows inside a section (e.g. "Plank") are
+    // exercises, not labels.
+    if (!a && c && !b && !sets.length && afterBlank) {
       section = c;
+      currentGroup = '';
       return;
     }
     if (!c) return;
 
     if (a) currentGroup = a;
-    const groupName = currentGroup || 'Other';
+    const groupName = currentGroup || section.split(' (')[0] || 'Other';
 
     if (!byName[groupName]) {
       byName[groupName] = {

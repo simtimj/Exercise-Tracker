@@ -19,7 +19,8 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 
 - Spreadsheet "Ex", ID `1oBtPYDCDiiXms0cqbfiymrAQ-qqLeI5OI7Ojee8Z_IY`. The sheet is the source of truth.
 - Active tab: `V5: PT, Compound, Iso` (~128 rows, columns A–F). Older tabs (V4, v3, v2, v1) are history — don't write to them.
-- Row 1 is headers; row 2 is a section label ("PT (Try one …)"), not an exercise.
+- Row 1 is headers; row 2 is a section label ("PT (Try one …)"), not an exercise. Sections: PT, High ROI Compound, Abs, Isolation — each label is a C-only row right after an empty row. Name-only rows inside a section (e.g. "Plank") are exercises. Abs rows have no column A; their group falls back to the section name.
+- PT exercises appear on ~3 rows each (2–3x a week); each row is logged independently, so "X / 25 done this week" counts rows.
 - Column A — "Variety": muscle group / category (e.g. Glute, Lower).
 - Column B — "Link for xDate": last-trained date as free text, e.g. `9/22 Tues | …`. No year; often blank on rows grouped under the row above. `i` appears as a marker in some rows.
 - Column C — "Exercises": exercise name.
@@ -28,7 +29,8 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 
 ## Logging (confirmed format, 2026-10-22)
 
-- Each exercise row in the app has a box; Julius types sets like `15,15,15` and taps Log (empty box → confirm, then date only).
+- Each exercise row in the app has a Weight box (prefilled with the last weight used: leading text of the newest entry in that row, else any row of the same exercise) and a Sets box. Entry written = `<weight>, <sets>` like his existing `25lbs, 15,15,15`; a plain number weight gets `lbs` appended. Empty sets → confirm, then date only.
+- Section headers show `X / N done this week` (rows whose last date is in the current Mon–Sun week).
 - Column B: the date part is replaced with today in his style (`10/22 Thurs`); text after it (e.g. `| …`), hyperlinks and HYPERLINK formulas are kept. No date yet → `10/22 Thurs | <old text>`.
 - Columns D onward: the new entry goes in D (right of the exercise); older entries in that row shift right with empty gaps squeezed out; columns are added at the end of the sheet if a row runs out of room. Newest is always leftmost.
 - The server checks column C still matches the exercise name before writing (guards against a reordered sheet) and uses a script lock.
