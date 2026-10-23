@@ -162,7 +162,14 @@
 
     .log button:disabled { opacity: 0.5; }
 
-    .pill.none { background: var(--muted); }
+    /* Whole exercise box takes its heat color; mixed with the card color
+       just enough to keep the text readable in light and dark mode. */
+    tr.ex-row td {
+      background: color-mix(in srgb, var(--heat) 55%, var(--card));
+      border-color: color-mix(in srgb, var(--heat) 70%, var(--text));
+    }
+    tr.ex-row .ex-meta { color: var(--text); opacity: 0.75; }
+    tr.ex-row .tag { border-color: currentColor; }
 
     .pill {
       display: inline-block;
@@ -198,9 +205,11 @@
     let data = null;
     let sortMode = 'category';
 
-    // Apps Script turns null into undefined; no date → null.
+    const NO_DATE_DAYS = 30; // exercises with no date count as this many days
+
+    // Apps Script turns null into undefined; no date → NO_DATE_DAYS.
     function effectiveDays(n) {
-      return (n == null || isNaN(n)) ? null : n;
+      return (n == null || isNaN(n)) ? NO_DATE_DAYS : n;
     }
 
     // 0 = just trained (red) → 1+ = recovered (green).
@@ -212,7 +221,6 @@
     }
 
     function daysLabel(n) {
-      if (n == null) return 'no date';
       if (n === 0) return 'today';
       if (n === 1) return '1 day';
       return n + ' days';
@@ -231,7 +239,7 @@
       const all = [];
       data.groups.forEach(g => g.exercises.forEach(ex =>
         all.push(Object.assign({ group: g.name, recoveryDays: g.recoveryDays }, ex,
-          { days: effectiveDays(ex.daysSince) }))));
+          { days: effectiveDays(ex.daysSince), noDate: ex.daysSince == null }))));
       all.sort((a, b) => a.row - b.row);
 
       const sections = [];
@@ -291,7 +299,7 @@
       if (sortMode === 'days') {
         // One list, most days since first; exercises with no date at the bottom.
         const all = [].concat(...sections.map(s => s.exercises));
-        all.sort((a, b) => (b.days == null ? -1 : b.days) - (a.days == null ? -1 : a.days) || a.row - b.row);
+        all.sort((a, b) => b.days - a.days || a.noDate - b.noDate || a.row - b.row);
         sections = [{ name: 'All — longest since first', exercises: all, wide: true }];
       }
 
@@ -319,8 +327,9 @@
 
           const cell = row.insertCell();
           cell.className = 'days';
-          const pill = el('span', ex.days == null ? 'pill none' : 'pill', daysLabel(ex.days));
-          if (ex.days != null) pill.style.setProperty('--heat', heatColor(ex.days, ex.recoveryDays));
+          const pill = el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days));
+          row.className = 'ex-row';
+          row.style.setProperty('--heat', heatColor(ex.days, ex.recoveryDays));
           cell.append(pill);
         });
 
