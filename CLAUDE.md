@@ -11,7 +11,7 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 
 ## Files
 
-- `code.js` — server side: `doGet()` serves `Index`; `getSheetData()` returns the tab's display values; `getTrackerData()` → `parseRows()` returns groups (column A, carried down to blank-A rows) with exercises, last-trained date and days since. `RECOVERY_DAYS` is the per-group recovery config (placeholder values). Exports for Node so the parser can be tested locally with `node -e`.
+- `code.js` — server side: `doGet()` serves `Index`; `getSheetData()` returns the tab's display values; `getTrackerData()` → `parseRows()` returns groups (column A, carried down to blank-A rows) with exercises, last-trained date and days since. `RECOVERY_DAYS` is the per-group recovery config (placeholder values). `logExercise(row, name, entry)` writes to the sheet (see Logging below). Exports for Node so the parser and the pure logging helpers can be tested locally with `node -e`.
 - `Index.html` — client UI; calls server functions via `google.script.run`. One bordered table per section (from the sheet's section label rows: PT, Compound, Iso…); two tables side by side at ≥900px wide, one column on phones. Rows: name, muscle-group tag, date text/sets, and a heat-colored days pill (days / recoveryDays, red → green). Days cap at 30 ("30+"); missing dates count as 30+. Note: Apps Script returns `null` fields as `undefined`, so always null-check with `== null`. Default sort "Ready first" (most overdue at top of each section), or sheet order.
 - `appsscript.json` — V8, America/Los_Angeles, web app executes as the deploying user, access MYSELF.
 
@@ -25,6 +25,13 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 - Column C — "Exercises": exercise name.
 - Columns D–F — set logs as free text, e.g. `25lbs, 30, 25` or `20lbx2,   18…`.
 - The sheet already has conditional formatting; the app should do its own color coding rather than read sheet colors.
+
+## Logging (confirmed format, 2026-10-22)
+
+- Each exercise row in the app has a box; Julius types sets like `15,15,15` and taps Log (empty box → confirm, then date only).
+- Column B: the date part is replaced with today in his style (`10/22 Thurs`); text after it (e.g. `| …`), hyperlinks and HYPERLINK formulas are kept. No date yet → `10/22 Thurs | <old text>`.
+- Columns D onward: the new entry goes in D (right of the exercise); older entries in that row shift right with empty gaps squeezed out; columns are added at the end of the sheet if a row runs out of room. Newest is always leftmost.
+- The server checks column C still matches the exercise name before writing (guards against a reordered sheet) and uses a script lock.
 
 ## Planned features
 

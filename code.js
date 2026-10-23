@@ -78,11 +78,13 @@ function parseRows(rows, today) {
   let currentGroup = '';
 
   rows.slice(1).forEach((row, i) => {
-    const [a, b, c, d, e, f] = row.map(v => String(v || '').trim());
-    if (!a && !b && !c && !d && !e && !f) return;
+    const cells = row.map(v => String(v || '').trim());
+    const [a, b, c] = cells;
+    const sets = cells.slice(3).filter(Boolean); // D onward, newest first
+    if (!a && !b && !c && !sets.length) return;
 
     // Section label rows (e.g. "PT (Try one …)"): no group, only a title in C.
-    if (!a && c && !b && !d && !e && !f) {
+    if (!a && c && !b && !sets.length) {
       section = c;
       return;
     }
@@ -111,7 +113,7 @@ function parseRows(rows, today) {
       dateText: b,
       lastDate: date ? isoDate(date) : null,
       daysSince: date ? daysBetween(date, today) : null,
-      sets: [d, e, f].filter(Boolean),
+      sets: sets,
     };
     group.exercises.push(exercise);
 
@@ -124,7 +126,101 @@ function parseRows(rows, today) {
   return { today: isoDate(today), groups: groups };
 }
 
+// ---------- Logging (writes to the sheet) ----------
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat'];
+const DATE_RE = /\d{1,2}\s*\/+\s*\d{1,2}(\s+(Sun|Mon|Tues?|Wed|Thu(rs?)?|Fri|Sat)[a-z]*\.?)?/i;
+
+function dateLabel(d) {
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + DAY_NAMES[d.getDay()];
+}
+
+// "9/22 Tues | notes" -> "10/22 Thurs | notes". No date yet -> date goes in front.
+function replaceDateText(text, d) {
+  const label = dateLabel(d);
+  const t = String(text || '');
+  if (DATE_RE.test(t)) return t.replace(DATE_RE, label);
+  return t.trim() ? label + ' | ' + t.trim() : label;
+}
+
+// New entry goes first (column D); older entries shift right, gaps removed.
+// Returns the row's new D-onward cells, at least as wide as before.
+function buildSetCells(oldCells, entry) {
+  const kept = oldCells.filter(v => String(v == null ? '' : v).trim() !== '');
+  const cells = entry ? [entry].concat(kept) : kept;
+  while (cells.length < oldCells.length) cells.push('');
+  return cells;
+}
+
+// Called by the UI. row = 1-based sheet row; name guards against the sheet
+// having been reordered since the app loaded. entry = text like "15,15,15".
+function logExercise(row, name, entry) {
+  entry = String(entry || '').trim();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_NAME);
+    const current = String(sheet.getRange(row, 3).getDisplayValue()).trim();
+    if (current !== String(name).trim()) {
+      throw new Error('Sheet changed (row ' + row + ' is now "' + current + '"). Reload and try again.');
+    }
+    const today = new Date();
+
+    // Column B: swap in today's date, keep links / formulas / trailing text.
+    const bCell = sheet.getRange(row, 2);
+    const formula = bCell.getFormula();
+    if (formula) {
+      bCell.setFormula(DATE_RE.test(formula) ? formula.replace(DATE_RE, dateLabel(today)) : formula);
+    } else {
+      writeDateKeepingLinks(bCell, today);
+    }
+
+    // Columns D onward: new entry first, older ones pushed right.
+    if (entry) {
+      const width = Math.max(sheet.getLastColumn() - 3, 1);
+      const range = sheet.getRange(row, 4, 1, width);
+      const formulas = range.getFormulas()[0];
+      const old = range.getValues()[0].map((v, i) => formulas[i] || v);
+      const cells = buildSetCells(old, entry);
+      const needCols = 3 + cells.length;
+      if (needCols > sheet.getMaxColumns()) {
+        sheet.insertColumnsAfter(sheet.getMaxColumns(), needCols - sheet.getMaxColumns());
+      }
+      sheet.getRange(row, 4, 1, cells.length).setValues([cells]);
+    }
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  return getTrackerData();
+}
+
+// Rewrites column B's text but keeps any hyperlinks in it.
+function writeDateKeepingLinks(cell, today) {
+  const rich = cell.getRichTextValue();
+  const oldText = rich ? rich.getText() : String(cell.getDisplayValue());
+  const newText = replaceDateText(oldText, today);
+  const links = rich ? rich.getRuns().filter(r => r.getLinkUrl()) : [];
+  if (!links.length) {
+    cell.setValue(newText);
+    return;
+  }
+  // Map old positions to new ones around the replaced date.
+  const m = oldText.match(DATE_RE);
+  const mStart = m ? m.index : 0;
+  const mEnd = m ? m.index + m[0].length : 0;
+  const delta = newText.length - oldText.length;
+  const map = i => (i <= mStart ? i : i >= mEnd ? i + delta : Math.min(i, mStart + dateLabel(today).length));
+  const builder = SpreadsheetApp.newRichTextValue().setText(newText);
+  links.forEach(r => {
+    const s = map(r.getStartIndex());
+    const e = map(r.getEndIndex());
+    if (e > s) builder.setLinkUrl(s, e, r.getLinkUrl());
+  });
+  cell.setRichTextValue(builder.build());
+}
+
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { parseRows, parseSheetDate, recoveryDaysFor };
+  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, replaceDateText, buildSetCells };
 }

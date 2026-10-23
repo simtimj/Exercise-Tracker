@@ -133,6 +133,34 @@
       font-size: 10px;
     }
 
+    .log {
+      display: flex;
+      gap: 6px;
+      margin: 4px 0 2px;
+    }
+
+    .log input {
+      flex: 1;
+      min-width: 0;
+      padding: 5px 8px;
+      font-size: 16px; /* 16px stops iPhone zooming in on focus */
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .log button {
+      padding: 5px 12px;
+      font-size: 14px;
+      border: 1px solid var(--text);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+    }
+
+    .log button:disabled { opacity: 0.5; }
+
     .pill {
       display: inline-block;
       min-width: 56px;
@@ -221,6 +249,42 @@
       return sections;
     }
 
+    // One box per exercise: type sets like "15,15,15", tap Log.
+    function logBox(ex) {
+      const form = el('form', 'log');
+      const input = el('input');
+      input.placeholder = 'Sets, e.g. 15,15,15';
+      input.enterKeyHint = 'done';
+      const btn = el('button', '', 'Log');
+      btn.type = 'submit';
+      form.append(input, btn);
+      form.addEventListener('submit', e => {
+        e.preventDefault();
+        const entry = input.value.trim();
+        if (!entry && !confirm('Mark "' + ex.name + '" done today with no sets?')) return;
+        btn.disabled = true;
+        btn.textContent = '…';
+        setStatus('Saving ' + ex.name + '…');
+        google.script.run
+          .withSuccessHandler(result => {
+            data = result;
+            render();
+            setStatus('Logged ' + ex.name);
+          })
+          .withFailureHandler(err => {
+            btn.disabled = false;
+            btn.textContent = 'Log';
+            setStatus('Error: ' + err.message);
+          })
+          .logExercise(ex.row, ex.name, entry);
+      });
+      return form;
+    }
+
+    function setStatus(text) {
+      document.getElementById('status').textContent = text;
+    }
+
     function render() {
       const wrap = document.getElementById('groups');
       wrap.innerHTML = '';
@@ -244,9 +308,9 @@
           main.append(el('div', 'ex-name', ex.name));
           const meta = el('div', 'ex-meta');
           meta.append(el('span', 'tag', ex.group));
-          const detail = [ex.dateText, (ex.sets || []).join(' / ')].filter(Boolean).join(' · ');
+          const detail = [ex.dateText, (ex.sets || []).slice(0, 3).join(' / ')].filter(Boolean).join(' · ');
           if (detail) meta.append(document.createTextNode(detail));
-          main.append(meta);
+          main.append(meta, logBox(ex));
 
           const cell = row.insertCell();
           cell.className = 'days';
