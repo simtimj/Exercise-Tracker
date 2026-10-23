@@ -52,6 +52,7 @@ function planFor(plan, today) {
     name: String(it.name || ''),
     weight: String(it.weight || ''),
     target: String(it.target || ''),
+    note: String(it.note || ''),
   }));
 }
 

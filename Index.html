@@ -185,6 +185,13 @@
     tr.ex-row .ex-meta { color: var(--text); opacity: 0.75; }
     tr.ex-row .tag { border-color: currentColor; }
 
+    /* Focus table: today's plan pinned above every list. */
+    table.section.focus { border: 2px solid var(--text); }
+    table.section.focus th { background: var(--text); color: var(--bg); }
+    table.section.focus th .section-count { color: var(--bg); opacity: 0.8; }
+    tr.ex-row.done td { opacity: 0.55; }
+    .ex-note { font-size: 12px; font-style: italic; margin-top: 2px; }
+
     .pill {
       display: inline-block;
       min-width: 56px;
@@ -357,6 +364,21 @@
       return form;
     }
 
+    function isDoneToday(ex) {
+      return !ex.noDate && ex.lastDate === data.today;
+    }
+
+    // Plan from plan.js, matched by row (falls back to name if rows moved).
+    // Keeps plan order, but anything already logged today moves to the end.
+    function plannedExercises(sections) {
+      const all = [].concat(...sections.map(s => s.exercises));
+      const planned = (data.plan || []).map(p => {
+        const ex = all.find(e => e.row === p.row && e.name === p.name) || all.find(e => e.name === p.name);
+        return ex ? Object.assign({}, ex, { plan: p }) : null;
+      }).filter(Boolean);
+      return planned.filter(ex => !isDoneToday(ex)).concat(planned.filter(isDoneToday));
+    }
+
     function setStatus(text) {
       document.getElementById('status').textContent = text;
     }
@@ -380,27 +402,29 @@
         }
         sections = [{ name: "Today's exercises", exercises: done, wide: true }];
       } else if (sortMode === 'plan') {
-        // Plan from plan.js, matched by row (falls back to name if rows moved).
-        const all = [].concat(...sections.map(s => s.exercises));
-        const planned = (data.plan || []).map(p => {
-          const ex = all.find(e => e.row === p.row && e.name === p.name) || all.find(e => e.name === p.name);
-          return ex ? Object.assign({}, ex, { plan: p }) : null;
-        }).filter(Boolean);
+        const planned = plannedExercises(sections);
         if (!planned.length) {
           wrap.append(el('p', 'empty', 'No plan for today yet. Ask Claude for one.'));
           return;
         }
-        sections = [{ name: "Today's plan", exercises: planned, wide: true }];
+        sections = [{ name: "Today's plan", exercises: planned, wide: true, focus: true }];
+      }
+
+      // Focus: today's plan bubbles to the top of the Category and Days views,
+      // still-to-do first, done ones sink to the bottom of the table.
+      if (sortMode === 'category' || sortMode === 'days') {
+        const planned = plannedExercises(sections);
+        if (planned.length) sections.unshift({ name: 'Focus — today', exercises: planned, wide: true, focus: true });
       }
 
       sections.forEach(sec => {
         const exercises = sec.exercises;
         const countText = sortMode === 'today'
           ? exercises.length + ' done'
-          : sortMode === 'plan'
-          ? exercises.filter(ex => !ex.noDate && ex.lastDate === data.today).length + ' / ' + exercises.length + ' done'
+          : sec.focus
+          ? exercises.filter(isDoneToday).length + ' / ' + exercises.length + ' done'
           : exercises.filter(doneThisWeek).length + ' / ' + exercises.length + ' done this week';
-        const table = el('table', sec.wide ? 'section wide' : 'section');
+        const table = el('table', 'section' + (sec.wide ? ' wide' : '') + (sec.focus ? ' focus' : ''));
         const head = table.createTHead().insertRow();
         const th = el('th');
         th.colSpan = 2;
@@ -411,14 +435,14 @@
         const body = table.createTBody();
         // Category view: subheadings per muscle group (column A), groups in sheet order.
         let list = exercises;
-        if (sortMode === 'category') {
+        if (sortMode === 'category' && !sec.focus) {
           const order = [];
           exercises.forEach(ex => { if (!order.includes(ex.group)) order.push(ex.group); });
           list = order.flatMap(g => exercises.filter(ex => ex.group === g));
         }
         let lastGroup = null;
         list.forEach(ex => {
-          if (sortMode === 'category' && ex.group !== lastGroup) {
+          if (sortMode === 'category' && !sec.focus && ex.group !== lastGroup) {
             lastGroup = ex.group;
             const groupRows = list.filter(e => e.group === ex.group);
             const sub = body.insertRow();
@@ -432,20 +456,22 @@
           const main = row.insertCell();
           main.append(el('div', 'ex-name', ex.name));
           const meta = el('div', 'ex-meta');
-          if (sortMode !== 'category') meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
+          if (sortMode !== 'category' || sec.focus) meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
           if (ex.plan) {
-            const doneToday = !ex.noDate && ex.lastDate === data.today;
+            const doneToday = isDoneToday(ex);
             const target = [ex.plan.target, ex.plan.weight].filter(Boolean).join(' @ ');
             meta.append(el('span', 'tag', doneToday ? '✓ done' : 'Plan' + (target ? ': ' + target : '')));
           }
           const detail = [ex.dateText, (ex.sets || []).slice(0, 3).join(' / ')].filter(Boolean).join(' · ');
           if (detail) meta.append(document.createTextNode(detail));
-          main.append(meta, logBox(ex));
+          main.append(meta);
+          if (ex.plan && ex.plan.note) main.append(el('div', 'ex-note', ex.plan.note));
+          main.append(logBox(ex));
 
           const cell = row.insertCell();
           cell.className = 'days';
           const pill = el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days));
-          row.className = 'ex-row';
+          row.className = 'ex-row' + (ex.plan && isDoneToday(ex) ? ' done' : '');
           row.style.setProperty('--heat', heatColor(ex.days, ex.recoveryDays));
           cell.append(pill);
         });
