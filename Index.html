@@ -151,6 +151,8 @@
       color: var(--text);
     }
 
+    .empty { color: var(--muted); text-align: center; padding: 24px 0; grid-column: 1 / -1; }
+
     .log input.weight { flex: 0 0 5.5em; }
 
     .log button {
@@ -197,6 +199,7 @@
   <div class="controls">
     <button data-sort="category" class="active">Category</button>
     <button data-sort="days">Days since</button>
+    <button data-sort="today">Today's exercises</button>
   </div>
 
   <div class="legend"><span>Just trained</span><div class="bar"></div><span>Recovered</span></div>
@@ -347,17 +350,27 @@
         const all = [].concat(...sections.map(s => s.exercises));
         all.sort((a, b) => b.days - a.days || a.noDate - b.noDate || a.row - b.row);
         sections = [{ name: 'All — longest since first', exercises: all, wide: true }];
+      } else if (sortMode === 'today') {
+        // Everything logged today, in sheet order.
+        const done = [].concat(...sections.map(s => s.exercises)).filter(ex => !ex.noDate && ex.lastDate === data.today);
+        if (!done.length) {
+          wrap.append(el('p', 'empty', 'Nothing logged yet today.'));
+          return;
+        }
+        sections = [{ name: "Today's exercises", exercises: done, wide: true }];
       }
 
       sections.forEach(sec => {
         const exercises = sec.exercises;
+        const countText = sortMode === 'today'
+          ? exercises.length + ' done'
+          : exercises.filter(doneThisWeek).length + ' / ' + exercises.length + ' done this week';
         const table = el('table', sec.wide ? 'section wide' : 'section');
         const head = table.createTHead().insertRow();
         const th = el('th');
         th.colSpan = 2;
         th.append(el('span', 'section-name', sec.name),
-          el('span', 'section-count',
-            exercises.filter(doneThisWeek).length + ' / ' + exercises.length + ' done this week'));
+          el('span', 'section-count', countText));
         head.append(th);
 
         const body = table.createTBody();
@@ -366,7 +379,7 @@
           const main = row.insertCell();
           main.append(el('div', 'ex-name', ex.name));
           const meta = el('div', 'ex-meta');
-          if (sortMode === 'days' && ex.section) meta.append(el('span', 'tag', ex.section.split(' (')[0]));
+          if (sortMode !== 'category' && ex.section) meta.append(el('span', 'tag', ex.section.split(' (')[0]));
           meta.append(el('span', 'tag', ex.group));
           const detail = [ex.dateText, (ex.sets || []).slice(0, 3).join(' / ')].filter(Boolean).join(' · ');
           if (detail) meta.append(document.createTextNode(detail));
