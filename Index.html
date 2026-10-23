@@ -4,46 +4,245 @@
 <head>
   <base target="_top">
   <style>
-    body {
-      font-family: system-ui, sans-serif;
-      margin: 16px;
+    :root {
+      --bg: #f6f6f4;
+      --card: #ffffff;
+      --text: #1d1d1b;
+      --muted: #6b6b66;
+      --border: #e3e3df;
     }
 
-    table {
-      border-collapse: collapse;
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161615;
+        --card: #222220;
+        --text: #f0f0ec;
+        --muted: #a3a39c;
+        --border: #34342f;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      max-width: 640px;
+      margin-inline: auto;
+    }
+
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    h1 { font-size: 20px; margin: 0; }
+
+    #status { color: var(--muted); font-size: 13px; }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin: 8px 0 12px;
+    }
+
+    .controls button {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      border-radius: 8px;
       font-size: 14px;
     }
 
-    td,
-    th {
-      border: 1px solid #ccc;
-      padding: 4px 8px;
+    .controls button.active { border-color: var(--text); font-weight: 600; }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 12px;
     }
+
+    .legend .bar {
+      flex: 1;
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(to right, hsl(0 75% 50%), hsl(30 85% 50%), hsl(55 85% 48%), hsl(120 55% 42%));
+    }
+
+    .group {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 8px solid var(--heat);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+
+    .group summary {
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px;
+      cursor: pointer;
+    }
+
+    .group summary::-webkit-details-marker { display: none; }
+
+    .gname { font-weight: 600; font-size: 16px; }
+    .gsub { font-size: 12px; color: var(--muted); }
+
+    .pill {
+      flex-shrink: 0;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--heat);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .ex {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .dot {
+      flex-shrink: 0;
+      width: 12px;
+      height: 12px;
+      margin-top: 4px;
+      border-radius: 50%;
+      background: var(--heat);
+    }
+
+    .ex-main { flex: 1; min-width: 0; }
+    .ex-name { font-size: 15px; }
+    .ex-meta { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+    .ex-days { font-size: 13px; color: var(--muted); white-space: nowrap; }
   </style>
 </head>
 
 <body>
-  <h2>Exercise Tracker</h2>
-  <div id="status">Loading…</div>
-  <table id="data"></table>
+  <header>
+    <h1>Exercise Tracker</h1>
+    <div id="status">Loading…</div>
+  </header>
+
+  <div class="controls">
+    <button data-sort="ready" class="active">Ready first</button>
+    <button data-sort="sheet">Sheet order</button>
+  </div>
+
+  <div class="legend"><span>Just trained</span><div class="bar"></div><span>Ready</span></div>
+
+  <div id="groups"></div>
+
   <script>
-    google.script.run
-      .withSuccessHandler(rows => {
-        document.getElementById('status').textContent = rows.length + ' rows loaded';
-        const table = document.getElementById('data');
-        rows.slice(0, 10).forEach((row, i) => {
-          const tr = table.insertRow();
-          row.forEach(cell => {
-            const el = document.createElement(i === 0 ? 'th' : 'td');
-            el.textContent = cell;
-            tr.appendChild(el);
-          });
+    const GREY = 'hsl(0 0% 60%)';
+    let data = null;
+    let sortMode = 'ready';
+
+    // 0 = just trained (red) → 1+ = recovered (green).
+    function heatColor(daysSince, recoveryDays) {
+      if (daysSince === null) return GREY;
+      const t = Math.max(0, Math.min(1, daysSince / recoveryDays));
+      const hue = t * 120;
+      const light = 50 - t * 8;
+      return `hsl(${hue.toFixed(0)} 75% ${light.toFixed(0)}%)`;
+    }
+
+    function daysLabel(n) {
+      if (n === null) return 'no date';
+      if (n === 0) return 'today';
+      if (n === 1) return '1 day';
+      return n + ' days';
+    }
+
+    // Unknown dates sort as most ready, then by how far past recovery.
+    function readiness(g) {
+      return g.daysSince === null ? Infinity : g.daysSince / g.recoveryDays;
+    }
+
+    function el(tag, cls, text) {
+      const node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+
+    function render() {
+      const wrap = document.getElementById('groups');
+      wrap.innerHTML = '';
+      const groups = data.groups.slice();
+      if (sortMode === 'ready') groups.sort((a, b) => readiness(b) - readiness(a));
+
+      groups.forEach(g => {
+        const details = el('details', 'group');
+        details.style.setProperty('--heat', heatColor(g.daysSince, g.recoveryDays));
+
+        const summary = el('summary');
+        const left = el('div');
+        left.append(el('div', 'gname', g.name));
+        const ready = g.daysSince !== null && g.daysSince >= g.recoveryDays;
+        left.append(el('div', 'gsub',
+          `${g.exercises.length} exercise${g.exercises.length === 1 ? '' : 's'} · recovers in ${g.recoveryDays}d` +
+          (ready ? ' · ready' : '')));
+        summary.append(left, el('span', 'pill', daysLabel(g.daysSince)));
+        details.append(summary);
+
+        g.exercises.forEach(ex => {
+          const row = el('div', 'ex');
+          const dot = el('span', 'dot');
+          dot.style.setProperty('--heat', heatColor(ex.daysSince, g.recoveryDays));
+          const main = el('div', 'ex-main');
+          main.append(el('div', 'ex-name', ex.name));
+          const meta = [ex.dateText, ex.sets.join(' / ')].filter(Boolean).join(' · ');
+          if (meta) main.append(el('div', 'ex-meta', meta));
+          row.append(dot, main, el('span', 'ex-days', daysLabel(ex.daysSince)));
+          details.append(row);
         });
+
+        wrap.append(details);
+      });
+    }
+
+    document.querySelectorAll('.controls button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sortMode = btn.dataset.sort;
+        document.querySelectorAll('.controls button').forEach(b => b.classList.toggle('active', b === btn));
+        if (data) render();
+      });
+    });
+
+    google.script.run
+      .withSuccessHandler(result => {
+        data = result;
+        const count = result.groups.reduce((n, g) => n + g.exercises.length, 0);
+        document.getElementById('status').textContent =
+          `${result.groups.length} groups · ${count} exercises`;
+        render();
       })
       .withFailureHandler(err => {
         document.getElementById('status').textContent = 'Error: ' + err.message;
       })
-      .getSheetData();
+      .getTrackerData();
   </script>
 </body>
 
