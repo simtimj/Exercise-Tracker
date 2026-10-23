@@ -210,6 +210,7 @@
     <button data-sort="category" class="active">Category</button>
     <button data-sort="days">Days since</button>
     <button data-sort="today">Today's exercises</button>
+    <button data-sort="plan">Today's plan</button>
   </div>
 
   <div class="legend"><span>Just trained</span><div class="bar"></div><span>Recovered</span></div>
@@ -323,7 +324,7 @@
       const form = el('form', 'log');
       const weight = el('input', 'weight');
       weight.placeholder = 'Weight';
-      weight.value = lastWeight(ex);
+      weight.value = (ex.plan && ex.plan.weight) || lastWeight(ex);
       const input = el('input');
       input.placeholder = 'Sets, e.g. 15,15,15';
       input.enterKeyHint = 'done';
@@ -378,12 +379,26 @@
           return;
         }
         sections = [{ name: "Today's exercises", exercises: done, wide: true }];
+      } else if (sortMode === 'plan') {
+        // Plan from plan.js, matched by row (falls back to name if rows moved).
+        const all = [].concat(...sections.map(s => s.exercises));
+        const planned = (data.plan || []).map(p => {
+          const ex = all.find(e => e.row === p.row && e.name === p.name) || all.find(e => e.name === p.name);
+          return ex ? Object.assign({}, ex, { plan: p }) : null;
+        }).filter(Boolean);
+        if (!planned.length) {
+          wrap.append(el('p', 'empty', 'No plan for today yet. Ask Claude for one.'));
+          return;
+        }
+        sections = [{ name: "Today's plan", exercises: planned, wide: true }];
       }
 
       sections.forEach(sec => {
         const exercises = sec.exercises;
         const countText = sortMode === 'today'
           ? exercises.length + ' done'
+          : sortMode === 'plan'
+          ? exercises.filter(ex => !ex.noDate && ex.lastDate === data.today).length + ' / ' + exercises.length + ' done'
           : exercises.filter(doneThisWeek).length + ' / ' + exercises.length + ' done this week';
         const table = el('table', sec.wide ? 'section wide' : 'section');
         const head = table.createTHead().insertRow();
@@ -418,6 +433,11 @@
           main.append(el('div', 'ex-name', ex.name));
           const meta = el('div', 'ex-meta');
           if (sortMode !== 'category') meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
+          if (ex.plan) {
+            const doneToday = !ex.noDate && ex.lastDate === data.today;
+            const target = [ex.plan.target, ex.plan.weight].filter(Boolean).join(' @ ');
+            meta.append(el('span', 'tag', doneToday ? '✓ done' : 'Plan' + (target ? ': ' + target : '')));
+          }
           const detail = [ex.dateText, (ex.sets || []).slice(0, 3).join(' / ')].filter(Boolean).join(' · ');
           if (detail) meta.append(document.createTextNode(detail));
           main.append(meta, logBox(ex));

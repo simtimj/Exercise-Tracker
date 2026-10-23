@@ -39,7 +39,20 @@ function getSheetData() {
 
 // Called by the UI: parsed groups + exercises with days since last trained.
 function getTrackerData() {
-  return parseRows(getSheetData(), new Date());
+  const result = parseRows(getSheetData(), new Date());
+  result.plan = planFor(typeof TODAY_PLAN === 'undefined' ? null : TODAY_PLAN, result.today);
+  return result;
+}
+
+// Plan items for today only (TODAY_PLAN lives in plan.js); stale plans → [].
+function planFor(plan, today) {
+  if (!plan || plan.date !== today || !Array.isArray(plan.items)) return [];
+  return plan.items.map(it => ({
+    row: Number(it.row) || 0,
+    name: String(it.name || ''),
+    weight: String(it.weight || ''),
+    target: String(it.target || ''),
+  }));
 }
 
 function recoveryDaysFor(group) {
@@ -229,5 +242,5 @@ function writeDateKeepingLinks(cell, today) {
 
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, replaceDateText, buildSetCells };
+  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, replaceDateText, buildSetCells, planFor };
 }

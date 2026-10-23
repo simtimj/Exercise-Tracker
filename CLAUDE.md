@@ -39,7 +39,14 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 
 1. Parse V5 into exercises with muscle group + last-trained date; compute days since last trained per exercise and per group.
 2. Heat-map UI: red = just trained ("hot"), cooling through orange/yellow to green = recovered and ready. Recovery times per muscle group are still to be decided — keep them in one config object.
-3. "Today's plan": Claude proposes a day's plan as a table, Julius confirms, then the chosen exercises get marked in the sheet and show as today's plan in the app.
+3. "Today's plan" (built 2026-10-23): Claude proposes a day's plan as a table, Julius confirms, then Claude writes it into `plan.js` and pushes; it shows under the "Today's plan" button. See Plans below.
+
+## Plans
+
+- Claude can't reach Google from its workspace (script.google.com and the Sheets API are blocked), so it can't write to the sheet directly. Plans go through GitHub instead: edit `TODAY_PLAN` in `plan.js` and push to `main` (deploys in ~1 min).
+- Format: `{ date: 'YYYY-MM-DD', items: [{ row, name, weight, target }] }`. `row` = 1-based sheet row and `name` = exact column C text (read them from the sheet via the Google Drive connector, which can read but not edit it). `weight` prefills the Weight box; `target` is shown as the plan, e.g. `3×15`.
+- `planFor()` in `code.js` only returns the plan when `date` is today, so old plans disappear by themselves. Items are matched by row + name, falling back to name if rows moved.
+- The plan itself is never written to the sheet. Tapping Log on a planned row uses `logExercise()` (confirmed format above), which is what lands in the sheet.
 
 ## Conventions
 
