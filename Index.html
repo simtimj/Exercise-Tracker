@@ -1188,10 +1188,13 @@
       return row;
     }
 
+    // One-line meta: always names the muscle group (Julius), e.g.
+    // `PT · Hips · 3 days since`, or `PT · Hips · Later · rest day …`.
     function pickMeta(ex) {
       const g = ex.suggestGroup;
-      const parts = [ex.category];
-      if (g && g.name !== ex.area) parts.push(g.name + ' ' + sinceText(g.since));
+      const parts = [ex.category, ex.group];
+      if (ex.why) parts.push('Later', ex.why);
+      else if (g) parts.push(sinceText(g.since));
       return parts.join(' · ');
     }
 
@@ -1320,7 +1323,7 @@
         sug.ptGroups.forEach(g => {
           secEl.append(ptGroupSub(g));
           g.items.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true)
-            : pickRow(ex, ex.why ? 'later · ' + ex.why : pickMeta(ex))));
+            : pickRow(ex, pickMeta(ex))));
         });
       }
 
@@ -1795,7 +1798,7 @@
         const items = g.items.filter(ex => !isDoneToday(ex));
         if (!items.length) return;
         s.append(ptGroupSub(g));
-        items.forEach(ex => s.append(pvRow(ex, ex.why ? 'Later · ' + ex.why : pickMeta(ex), [quickAdd(ex, true)])));
+        items.forEach(ex => s.append(pvRow(ex, pickMeta(ex), [quickAdd(ex, true)])));
       });
       sug.blocks.forEach((b, i) => block((i + 1) + '. ' + b.area.name,
         ' · ' + sinceText(b.area.since), b.items, pickMeta));
