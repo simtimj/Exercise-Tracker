@@ -112,6 +112,7 @@
       box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
     }
 
+    .legend.wide { grid-column: 1 / -1; margin: -12px 2px 0; }
     .legend {
       display: flex;
       align-items: center;
@@ -643,8 +644,6 @@
     </div>
 
     <div id="pt-strip"></div>
-
-    <div class="legend"><span>Just trained</span><div class="bar"></div><span>Recovered</span></div>
   </div>
 
   <div id="groups"></div>
@@ -1400,8 +1399,13 @@
       const met = pt.filter(ex => ex.met).length;
       const started = pt.filter(ex => !ex.met && ex.weekDone > 0).length;
       if (pt.length && met === pt.length) good.push({ head: 'All PT done', body: 'Every PT exercise hit its goal this week — great consistency.' });
-      else if (met) good.push({ head: 'PT ' + met + ' of ' + pt.length + ' done', body: 'Finished for the week' + (started ? ', and ' + started + ' more are started.' : '.') });
-      else if (started) good.push({ head: 'PT underway', body: started + ' of ' + pt.length + ' started this week.' });
+      else if (met || started) {
+        const sd = pt.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0);
+        const st = pt.reduce((n, ex) => n + ex.weekTarget, 0);
+        good.push({ head: 'PT ' + sd + ' of ' + st + ' sessions done',
+          body: (met ? met + ' of ' + pt.length + ' exercises finished for the week' : 'None finished yet')
+            + (started ? ', ' + started + ' more started.' : '.') });
+      }
 
       // Suggestions, most important first.
       const owed = sug.pt.filter(ex => !isDoneToday(ex));
@@ -1598,12 +1602,12 @@
       const bar = segBar(pt.map(ex => Math.min(1, ex.weekDone / ex.weekTarget)), met === pt.length ? 'all' : '');
       // "0/9 done · 3 started" so the amber half-boxes are explained.
       const started = pt.filter(ex => !ex.met && ex.weekDone > 0).length;
+      // Counted in sessions: an exercise done 2×/wk counts 2 toward the total.
+      const sessDone = pt.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0);
+      const sessTotal = pt.reduce((n, ex) => n + ex.weekTarget, 0);
       const count = el('span', 'pt-count');
-      if (met === pt.length) count.textContent = 'all done ✓';
-      else {
-        count.append(document.createTextNode(met + '/' + pt.length + ' done'));
-        if (started) count.append(el('span', 'started', ' · ' + started + ' started'));
-      }
+      count.textContent = met === pt.length ? 'all done ✓' : sessDone + '/' + sessTotal + ' done';
+      count.title = 'Sessions this week (exercises done 2–3× a week count each time)';
       line.append(el('span', 'pt-label', 'PT this week'), bar, count);
       strip.append(line);
 
@@ -1624,7 +1628,8 @@
 
       // Bonus: everything that isn't PT. Nice to have, not required.
       const extra = [].concat(...sections.filter(s => s.name !== 'PT').map(s => s.exercises));
-      if (extra.length) {
+      // Bonus only appears once every PT exercise has met its weekly goal.
+      if (extra.length && met === pt.length) {
         const hit = extra.filter(ex => ex.weekDone > 0).length;
         const bLine = el('div', 'pt-line bonus');
         const bBar = segBar(extra.map(ex => (ex.weekDone > 0 ? 1 : 0)), 'blue');
@@ -1690,6 +1695,10 @@
         });
         zone.append(sortBox);
         wrap.append(zone);
+        // Color key lives with the full list (the left edge of each card).
+        const legend = el('div', 'legend wide');
+        legend.append(el('span', '', 'Just trained'), el('div', 'bar'), el('span', '', 'Recovered'));
+        wrap.append(legend);
       }
       sections.forEach(sec => wrap.append(sectionEl(sec)));
       setTopHeight();
