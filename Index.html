@@ -1088,8 +1088,22 @@
         blocks.push({ area: a, items: doneLast(items.sort(byCat).map(tag)) });
       }
 
+      // PT grouped by body area (muscle focus), so it's easy to pick one
+      // group and spread the rest across days. Groups with a rested item
+      // lead, then most days since the area was trained.
+      const ptGroups = [];
+      pt.forEach(ex => {
+        let g = ptGroups.find(x => x.area.name === ex.area);
+        if (!g) ptGroups.push(g = { area: areas[ex.area], items: [] });
+        g.items.push(ex);
+      });
+      ptGroups.forEach(g => { g.items = doneLast(g.items); g.ready = g.items.some(ptOk); });
+      ptGroups.sort((a, b) => b.ready - a.ready
+        || effectiveDays(b.area.since) - effectiveDays(a.area.since) || a.area.name.localeCompare(b.area.name));
+
       return {
         pt: doneLast(pt),
+        ptGroups,
         blocks,
         resting: Object.values(areas).filter(a => !a.ready),
         unmapped: [...new Set(all.filter(ex => ex.area === 'Other').map(ex => ex.group))],
@@ -1239,6 +1253,19 @@
       return secEl;
     }
 
+    // Subhead for one PT muscle-focus group: `PT · Glutes/Hips · 3d since`.
+    function ptGroupSub(g, noCount) {
+      const a = g.area;
+      const sub = el('div', 'sub sug-sub pt-head');
+      const lbl = el('span', '');
+      lbl.append(el('strong', 'key', 'PT · ' + a.name),
+        el('span', 'sub-rest', ' · ' + (a.since == null ? 'no log' : a.since + 'd since')
+          + (a.ready ? '' : ' · resting until ' + a.until)));
+      sub.append(lbl);
+      if (!noCount) sub.append(el('span', '', g.items.filter(isDoneToday).length + ' / ' + g.items.length + ' done'));
+      return sub;
+    }
+
     function suggestSection(sections) {
       const sug = suggestedExercises(sections);
       const secEl = el('section', 'section wide suggest');
@@ -1267,16 +1294,15 @@
         if (restEditOpen) secEl.append(restEditor());
       }
 
-      // PT block: always first.
+      // PT block: always first, grouped by muscle focus (body area).
       if (sug.pt.length) {
-        const sub = el('div', 'sub sug-sub pt-head');
-        const lbl = el('span', '');
-        lbl.append(el('strong', 'key', 'PT'), el('span', 'sub-rest', ' — do these first'));
-        sub.append(lbl,
-          el('span', '', sug.pt.filter(isDoneToday).length + ' / ' + sug.pt.length + ' done'));
-        secEl.append(sub);
-        sug.pt.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true)
-          : pickRow(ex, ex.why ? 'later · ' + ex.why : pickMeta(ex))));
+        secEl.append(el('div', 'rest-line pt-lead', 'PT — do these first · '
+          + sug.pt.filter(isDoneToday).length + ' / ' + sug.pt.length + ' done · pick a group:'));
+        sug.ptGroups.forEach(g => {
+          secEl.append(ptGroupSub(g));
+          g.items.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true)
+            : pickRow(ex, ex.why ? 'later · ' + ex.why : pickMeta(ex))));
+        });
       }
 
       // Then Compound + Isolation by area, longest since trained first.
@@ -1746,7 +1772,12 @@
         s.append(sub);
         items.filter(ex => !isDoneToday(ex)).forEach(ex => s.append(pvRow(ex, metaFn(ex), [quickAdd(ex, true)])));
       };
-      block('PT', ' — do these first', sug.pt, ex => ex.why ? 'Later · ' + ex.why : pickMeta(ex));
+      sug.ptGroups.forEach(g => {
+        const items = g.items.filter(ex => !isDoneToday(ex));
+        if (!items.length) return;
+        s.append(ptGroupSub(g, true));
+        items.forEach(ex => s.append(pvRow(ex, ex.why ? 'Later · ' + ex.why : pickMeta(ex), [quickAdd(ex, true)])));
+      });
       sug.blocks.forEach((b, i) => block((i + 1) + '. ' + b.area.name,
         ' · ' + (b.area.since == null ? 'no log' : b.area.since + 'd since'), b.items, pickMeta));
       if (s.children.length === 1) s.append(el('p', 'empty small', 'Nothing to suggest right now.'));
