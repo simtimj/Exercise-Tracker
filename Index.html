@@ -12,9 +12,9 @@
       --border: #e4e2dc;
       --soft: #ecebe6;
       /* Heat tones are kept low-saturation so the list isn't shouty. */
-      --heat-sat: 48%;
-      --heat-light: 56%;
-      --tint: 14%;
+      --heat-sat: 32%;
+      --heat-light: 58%;
+      --tint: 0%;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -25,9 +25,9 @@
         --muted: #9d9c95;
         --border: #33332f;
         --soft: #2a2a28;
-        --heat-sat: 40%;
+        --heat-sat: 28%;
         --heat-light: 52%;
-        --tint: 16%;
+        --tint: 0%;
       }
     }
 
@@ -126,7 +126,7 @@
     #groups {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 14px;
+      gap: 18px;
       align-items: start;
     }
 
@@ -175,8 +175,8 @@
       gap: 2px 10px;
       padding: 10px 12px 10px 10px;
       border-top: 1px solid var(--border);
-      border-left: 4px solid var(--accent);
-      background: color-mix(in srgb, var(--accent) var(--tint), var(--card));
+      border-left: 3px solid var(--accent);
+      background: var(--card);
     }
 
     .ex.done { opacity: 0.55; }
@@ -221,8 +221,8 @@
       text-align: center;
       padding: 3px 8px;
       border-radius: 999px;
-      background: color-mix(in srgb, var(--accent) 30%, var(--card));
-      border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--card));
+      background: var(--soft);
+      border: 1px solid var(--border);
       color: var(--text);
       font-size: 12px;
       font-weight: 600;
@@ -264,20 +264,31 @@
     .log button:disabled { opacity: 0.5; }
 
     /* Focus table: today's plan pinned above every list. */
-    .section.focus { border: 1.5px solid var(--muted); }
-    .section.focus .section-head { background: var(--soft); }
+    /* Pinned zones (Today, Suggested) get a dark header so they stand apart
+       from the plain exercise lists below — contrast, not color. */
+    .section.focus, .section.suggest { border: 1.5px solid var(--text); }
+    .section.focus .section-head, .section.suggest .section-head { background: var(--text); color: var(--bg); }
+    .section.focus .section-count, .section.suggest .section-count, .section.suggest .chev { color: color-mix(in srgb, var(--bg) 70%, var(--text)); }
+    .empty.small { padding: 14px 12px; font-size: 13px; text-align: left; }
+    .zone {
+      display: flex; align-items: center; gap: 10px; margin-top: 10px;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+    }
+    .zone::before, .zone::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .zone::before { flex: 0 0 12px; }
+    .ex-meta .add-today { margin-left: 0; }
+    .ex-meta .add-today:disabled { opacity: 0.6; }
 
     /* Suggested — today: picked from rested body areas. */
-    .section.suggest { border: 2px solid var(--accent); }
-    .section.suggest .section-head { background: color-mix(in srgb, var(--accent) 18%, var(--card)); cursor: pointer; font-weight: 700; }
+    .section.suggest .section-head { cursor: pointer; font-weight: 700; }
+    .section.suggest .sug-sub { margin-top: 6px; }
     .sug-sub { font-weight: 700; }
     .rest-line .jump {
       margin: 2px 4px 2px 0; padding: 2px 9px; font-size: 12px;
       border: 1px solid var(--border); border-radius: 999px;
       background: var(--card); color: var(--text); text-align: left;
     }
-    .pt-due .jump { border-color: hsl(40 60% 55%); }
-    .section.suggest .chev { font-size: 11px; color: var(--muted); margin-left: 6px; }
+    .section.suggest .chev { font-size: 11px; margin-left: 6px; }
     .rest-line {
       padding: 6px 12px; font-size: 12px; color: var(--muted);
       border-top: 1px solid var(--border); line-height: 1.4;
@@ -285,7 +296,7 @@
     .due-line { color: var(--text); }
     .due-line b { font-weight: 600; }
     .rest-line .unmapped { color: hsl(35 60% 42%); }
-    .tag.area { background: color-mix(in srgb, var(--accent) 22%, var(--card)); }
+    .tag.area { background: var(--soft); }
     .tag.other { outline: 1px dashed hsl(35 60% 50%); }
 
     /* Recovery days editor (inside Suggested). */
@@ -320,8 +331,8 @@
       display: flex; align-items: center; gap: 10px;
       min-height: 44px; padding: 6px 12px 6px 10px;
       border-top: 1px solid var(--border);
-      border-left: 4px solid var(--accent);
-      background: color-mix(in srgb, var(--accent) var(--tint), var(--card));
+      border-left: 3px solid var(--accent);
+      background: var(--card);
       font-size: 14px; cursor: pointer;
     }
     .pick-row.sel { background: color-mix(in srgb, var(--text) 10%, var(--card)); }
@@ -336,7 +347,7 @@
     }
     .ex-meta .mini { margin: 2px 4px 0 0; }
     .hint-line { font-style: italic; }
-    .sub.pt-head { color: var(--text); background: color-mix(in srgb, var(--accent) 22%, var(--card)); }
+    .sub.pt-head { color: var(--text); }
     .tag.later { outline: 1px dashed var(--muted); }
     .section.upnext { border: 1.5px dashed var(--muted); }
     .section.upnext .section-head { background: var(--soft); }
@@ -421,7 +432,7 @@
     .seg.full { background: var(--fill); box-shadow: none; }
     .seg i { display: block; height: 100%; background: hsl(40 65% 60%); }
     .seg-bar.all .seg { --fill: hsl(140 55% 42%); }
-    .seg-bar.blue .seg { --fill: hsl(210 var(--heat-sat) var(--heat-light)); height: 7px; }
+    .seg-bar.blue .seg { --fill: var(--muted); height: 7px; }
     .wk-days { font-weight: 600; }
     .pt-count .started { color: hsl(35 60% 42%); }
     @media (prefers-color-scheme: dark) { .pt-count .started { color: hsl(40 65% 62%); } }
@@ -445,8 +456,8 @@
     }
     .chip .chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .chip .chip-n { font-size: 11px; color: var(--muted); }
-    .chip.partial { border-color: hsl(40 60% 55%); background: color-mix(in srgb, hsl(40 70% 60%) 14%, var(--card)); }
-    .chip.met { border-color: transparent; background: color-mix(in srgb, hsl(130 45% 50%) 18%, var(--card)); color: var(--muted); }
+    .chip.partial { border-color: var(--muted); }
+    .chip.met { border-color: transparent; background: var(--soft); color: var(--muted); }
 
     /* PT cards: met ones get a check and step back so what's left stands out. */
     .ex.met .ex-name::before { content: '✓ '; color: hsl(130 45% 40%); }
@@ -965,6 +976,7 @@
     }
 
     let upNextKeys = new Set();
+    let todayKeys = new Set();
 
     // Current picks as stored, ready to edit and send back.
     function currentPicks() {
@@ -1190,6 +1202,14 @@
           meta.append(later, del);
         }
       }
+      if (!ex.plan) {
+        const inToday = todayKeys.has(ex.key);
+        const add = el('button', 'mini add-today', inToday ? '✓ Today' : '+ Today');
+        add.type = 'button';
+        add.disabled = inToday;
+        add.addEventListener('click', () => savePicks(movePicks([ex.key], 'today'), 'Added to today: ' + ex.name));
+        meta.append(add);
+      }
       if (meta.childNodes.length) card.append(meta);
       const history = historyLine(ex);
       if (history) card.append(history);
@@ -1273,6 +1293,7 @@
       [...picked].forEach(k => { if (!exByKey[k]) picked.delete(k); });
       const upNext = upNextExercises(all);
       upNextKeys = new Set(upNext.map(ex => ex.key));
+      todayKeys = new Set(plannedExercises(sections).map(ex => ex.key));
       renderPickBar();
       if (sortMode === 'days') {
         // One list, most days since first; exercises with no date at the bottom.
@@ -1294,14 +1315,19 @@
         sections = [{ name: "Today's plan", exercises: planned, wide: true, focus: true }];
       }
 
-      // Pinned on Category and Days: Focus (plan + today's picks), Up next,
-      // then Suggested.
+      // Pinned on Category and Days, as clearly separate zones: Today (plan +
+      // picks, always shown, even empty), Suggested, Up next — then a divider
+      // and every exercise.
       if (sortMode === 'category' || sortMode === 'days') {
         const base = buildSections();
         const planned = plannedExercises(base);
-        if (planned.length) wrap.append(sectionEl({ name: 'Focus — today', exercises: planned, wide: true, focus: true }));
-        if (upNext.length) wrap.append(upNextSection(upNext));
+        wrap.append(sectionEl({ name: 'Today', exercises: planned, wide: true, focus: true,
+          emptyText: 'Nothing planned yet. Tick suggestions below, or tap + Today on any exercise.' }));
         wrap.append(suggestSection(base));
+        if (upNext.length) wrap.append(upNextSection(upNext));
+        const zone = el('div', 'zone wide');
+        zone.append(el('span', '', 'All exercises'));
+        wrap.append(zone);
       }
       sections.forEach(sec => wrap.append(sectionEl(sec)));
     }
@@ -1334,6 +1360,7 @@
         } else {
           exercises.forEach(ex => secEl.append(exerciseCard(ex, true)));
         }
+        if (!exercises.length && sec.emptyText) secEl.append(el('p', 'empty small', sec.emptyText));
         return secEl;
       }
     }

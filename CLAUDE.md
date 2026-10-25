@@ -80,11 +80,17 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - Open = full cards with a checkbox before the name; collapsed = compact one-line `pick-row`s (checkbox · name · `Compound · UpBack 38d`). Both are selectable.
 - The old "Longest since" chip line and `jumpToArea()` were removed (the area subheads show it).
 
+## Layout + calmer colors (2026-10-25, Julius: "too much color, it blurs together")
+
+- Category/Days order: **Today** (always shown; empty state "Nothing planned yet…") → **Suggested** → **Up next** (only if any) → an `All exercises` divider (`.zone`) → the category sections. Today and Suggested have dark headers (contrast, not color) so the pinned zones stand apart; gap between sections is 18px.
+- Color reduced: cards and pick rows have no heat tint (`--tint: 0%`), only a 3px low-saturation left edge; days pill, area tags and PT/Bonus chips are neutral. Keep it that way unless he asks.
+- Every card not already in Today has a `+ Today` button (`✓ Today` once added) → `movePicks([key], 'today')`.
+
 ## Picks: Today / Up next (2026-10-25)
 
 - Ticking items fills `picked` (Set of exercise keys, tap order) and shows a fixed bottom `#pick-bar`: `N selected · Do today · Up next · ✕`.
 - Saved via `savePicks(picks)` in **user properties** (key `picks`, JSON `{ today: { date, items }, next: [] }`, item `{ row, name, added }`, max 30 each, cleaned by `cleanPicks()`). `getTrackerData()` returns `picks` via `picksFor()` — today's picks only on their date.
-- Today's picks join plan.js items in the Focus table (`plannedExercises()`, tag `Picked`, buttons `Later` → Up next and `✕` remove). Picked/planned exercises drop out of Suggested.
+- Today's picks join plan.js items in the Today section (was "Focus — today") (`plannedExercises()`, tag `Picked`, buttons `Later` → Up next and `✕` remove). Picked/planned exercises drop out of Suggested.
 - Up next: a dashed section pinned under Focus (`upNextSection()`), rows with `Today` and `✕`; tapping the name jumps to its card. An item drops off once logged on a day after it was added (`upNextExercises()`); logged today it shows dimmed. Suggested cards/rows for Up next items get an `up next` tag.
 - Moving an exercise to one list removes it from the other (`movePicks()`). Claude can't read these from its workspace.
 
