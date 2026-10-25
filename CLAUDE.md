@@ -75,8 +75,8 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 ## Suggested — by area, longest since first (2026-10-25, replaces the category split)
 
 - Julius uses Suggested most of the time; open by default with a solid accent border. A hint line says "Tick the ones you want, then Do today or Up next."
-- `suggestedExercises()` returns `blocks`: the top `SUGGEST_AREAS` (3) **ready** areas, most days since trained first, each as a subhead `1. Arms · 80d since`. Each block holds the area's open PT (up to `SUGGEST_PT_PER_AREA` = 3, area ready + not done yesterday), then the best Compound and best Isolation (one each), ordered PT → Compound → Isolation (`CAT_ORDER`). Within an area, `byNeglect` = most neglected muscle group (column A), then longest gap. Areas with nothing to pick are skipped.
-- Every other PT still short of its weekly goal is listed under **Other PT due this week** as compact rows with a reason (`Glutes/Hips · 3d`, `resting until Tue`, `rest day`), so no PT gets lost.
+- **PT first, always (Julius, 2026-10-25):** `suggestedExercises()` returns `pt` — every PT exercise still short of its weekly goal, as a "PT — do these first" block above everything. Rested ones (area ready + not done yesterday) lead, most days since the area first, then `byNeglect`; recently done ones (area resting / done yesterday) follow, still listed, tagged `Later · <reason>`. Even if all PT was done recently, anything still owed this week stays listed.
+- Secondary: `blocks` = the top `SUGGEST_AREAS` (3) ready areas, most days since trained first (`1. Arms · 80d since`), each with the best Compound and best Isolation only (no PT), from the area's most neglected muscle group (`byNeglect`). Areas with nothing to pick are skipped.
 - Open = full cards with a checkbox before the name; collapsed = compact one-line `pick-row`s (checkbox · name · `Compound · UpBack 38d`). Both are selectable.
 - The old "Longest since" chip line and `jumpToArea()` were removed (the area subheads show it).
 

@@ -336,6 +336,8 @@
     }
     .ex-meta .mini { margin: 2px 4px 0 0; }
     .hint-line { font-style: italic; }
+    .sub.pt-head { color: var(--text); background: color-mix(in srgb, var(--accent) 22%, var(--card)); }
+    .tag.later { outline: 1px dashed var(--muted); }
     .section.upnext { border: 1.5px dashed var(--muted); }
     .section.upnext .section-head { background: var(--soft); }
     .next-row { cursor: default; }
@@ -853,14 +855,11 @@
       return out;
     }
 
-    // Suggested, by body area: the ready areas that have gone longest without
-    // training come first (Push 13d, Legs 10d, …). Each area block gets its PT
-    // (up to SUGGEST_PT_PER_AREA), then one Compound and one Isolation, from
-    // the area's most neglected muscle group. Only the top SUGGEST_AREAS areas
-    // get a block; PT still due anywhere else is listed under them so no PT
-    // gets lost.
+    // Suggested: PT first — every PT short of its weekly goal, rested ones
+    // leading. Then, secondary, the top SUGGEST_AREAS ready areas that have
+    // gone longest without training (Arms 80d, Back 38d, …), each with one
+    // Compound and one Isolation from its most neglected muscle group.
     const SUGGEST_AREAS = 3;
-    const SUGGEST_PT_PER_AREA = 3;
     const CAT_ORDER = { PT: 0, Compound: 1, Isolation: 2 };
 
     function suggestedExercises(sections) {
@@ -884,31 +883,34 @@
       const restDay = ex => ex.slots.some(s => !s.noDate && s.days === 1);
       const ptOk = ex => ready(ex) && !restDay(ex);
 
+      // PT comes first, always: every PT still short of its weekly goal is
+      // listed. Rested ones (area ready, not done yesterday) lead, most
+      // neglected area first; recently done ones follow with the reason —
+      // still due this week, just lower.
+      const areaGap = ex => effectiveDays(areas[ex.area].since);
+      const pt = ptOpen
+        .sort((a, b) => ptOk(b) - ptOk(a) || areaGap(b) - areaGap(a) || byNeglect(a, b))
+        .map(ex => Object.assign(tag(ex), {
+          why: ptOk(ex) ? '' : !ready(ex) ? ex.area + ' resting until ' + areas[ex.area].until
+            : 'rest day (done yesterday)',
+        }));
+
+      // Secondary: Compound + Isolation by body area, longest since first.
       const readyAreas = Object.values(areas).filter(a => a.ready)
         .sort((a, b) => effectiveDays(b.since) - effectiveDays(a.since) || a.name.localeCompare(b.name));
       const blocks = [];
       for (const a of readyAreas) {
         if (blocks.length >= SUGGEST_AREAS) break;
         const here = all.filter(ex => ex.area === a.name && !inPlan.has(ex.key));
-        const pt = ptOpen.filter(ex => ex.area === a.name && ptOk(ex)).sort(byNeglect).slice(0, SUGGEST_PT_PER_AREA);
         const best = cat => here.filter(ex => ex.category === cat).sort(byNeglect)[0];
-        const items = pt.concat([best('Compound'), best('Isolation')].filter(Boolean));
+        const items = [best('Compound'), best('Isolation')].filter(Boolean);
         if (!items.length) continue;
         blocks.push({ area: a, items: doneLast(items.sort(byCat).map(tag)) });
       }
 
-      const shown = new Set([].concat(...blocks.map(b => b.items.map(ex => ex.key))));
-      const ptDue = ptOpen.filter(ex => !shown.has(ex.key))
-        .sort((a, b) => ptOk(b) - ptOk(a) || effectiveDays(areas[b.area].since) - effectiveDays(areas[a.area].since) || byNeglect(a, b))
-        .map(ex => Object.assign(tag(ex), {
-          why: !ready(ex) ? ex.area + ' resting until ' + areas[ex.area].until
-            : restDay(ex) ? 'rest day (done yesterday)'
-            : ex.area + ' · ' + (areas[ex.area].since == null ? 'no log' : areas[ex.area].since + 'd'),
-        }));
-
       return {
+        pt: doneLast(pt),
         blocks,
-        due: ptDue,
         resting: Object.values(areas).filter(a => !a.ready),
         unmapped: [...new Set(all.filter(ex => ex.area === 'Other').map(ex => ex.group))],
       };
@@ -1019,7 +1021,7 @@
       const head = el('div', 'section-head');
       const name = el('span', 'section-name', 'Suggested — today');
       name.append(el('span', 'chev', open ? '▾' : '▸'));
-      const items = [].concat(...sug.blocks.map(b => b.items));
+      const items = sug.pt.concat(...sug.blocks.map(b => b.items));
       const done = items.filter(isDoneToday).length;
       head.append(name, el('span', 'section-count', items.length ? done + ' / ' + items.length + ' done' : ''));
       head.addEventListener('click', () => { suggestOpen = !open; render(); });
@@ -1038,7 +1040,20 @@
         if (restEditOpen) secEl.append(restEditor());
       }
 
-      // One block per area, longest since trained first.
+      // PT block: always first.
+      if (sug.pt.length) {
+        const sub = el('div', 'sub sug-sub pt-head');
+        sub.append(el('span', '', 'PT — do these first'),
+          el('span', '', sug.pt.filter(isDoneToday).length + ' / ' + sug.pt.length + ' done'));
+        secEl.append(sub);
+        sug.pt.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true)
+          : pickRow(ex, ex.why ? 'later · ' + ex.why : pickMeta(ex))));
+      }
+
+      // Then Compound + Isolation by area, longest since trained first.
+      if (sug.blocks.length) {
+        secEl.append(el('div', 'rest-line', sug.pt.length ? 'Then, by area — longest since first:' : 'By area — longest since first:'));
+      }
       sug.blocks.forEach((b, i) => {
         const a = b.area;
         const sub = el('div', 'sub sug-sub area-head');
@@ -1048,13 +1063,7 @@
         b.items.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true) : pickRow(ex, pickMeta(ex))));
       });
 
-      if (sug.due.length) {
-        const sub = el('div', 'sub sug-sub');
-        sub.append(el('span', '', sug.blocks.length ? 'Other PT due this week' : 'PT due this week'), el('span', '', String(sug.due.length)));
-        secEl.append(sub);
-        sug.due.forEach(ex => secEl.append(pickRow(ex, ex.why)));
-      }
-      if (!items.length && !sug.due.length) {
+      if (!items.length) {
         secEl.append(el('p', 'empty', 'Nothing to suggest — every area is resting and this week\'s PT is done.'));
       }
       return secEl;
@@ -1163,6 +1172,7 @@
         }
         meta.append(el('span', 'tag', ex.category));
         if (upNextKeys.has(ex.key)) meta.append(el('span', 'tag', 'Up next'));
+        if (ex.why && !isDoneToday(ex)) meta.append(el('span', 'tag later', 'Later · ' + ex.why));
       }
       if (showTags) meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
       if (ex.freq) meta.append(el('span', 'tag', ex.freq));
