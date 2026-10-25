@@ -535,6 +535,68 @@
     .ex { scroll-margin-top: calc(var(--top-h, 180px) + 56px); }
     .ex.flash { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: inset 0 0 0 2px var(--text); } to { box-shadow: inset 0 0 0 2px transparent; } }
+
+    /* ================= Streamlined look (2026-10-25) =================
+       One level of rounding: each section is a single rounded panel.
+       Everything inside is flat — rows split by hairlines, groups by a
+       small label, details as plain text instead of chips/boxes. */
+    .section, .section.focus, .section.suggest, .section.upnext {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+    }
+    .section.focus, .section.suggest, .section.upnext { border-top: 3px solid var(--zone); }
+    .section-head, .section.focus .section-head, .section.suggest .section-head, .section.upnext .section-head {
+      background: var(--card); box-shadow: 0 1px 0 var(--border); border-radius: 13px 13px 0 0; padding: 12px 14px;
+    }
+    .section .grp, .section.summary .grp, .section.suggest .grp {
+      margin: 0; border: 0; border-radius: 0; overflow: visible; background: transparent;
+    }
+    .section .grp + .grp, .section .rest-line + .grp { border-top: 1px solid var(--border); }
+    .section .grp > .sub, .section .sub {
+      background: transparent; box-shadow: none; border-top: 0;
+      padding: 14px 14px 4px; font-size: 11.5px; color: var(--muted);
+    }
+    .section .grp > .ex, .section .grp > .pick-row, .section > .ex, .section > .pick-row {
+      background: transparent; border-top: 0;
+    }
+    .section .grp > .ex + .ex, .section .grp > .pick-row + .pick-row,
+    .section > .ex + .ex, .section > .pick-row + .pick-row {
+      border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+    }
+    .ex { padding: 12px 14px 12px 12px; border-left-width: 3px; }
+    .pick-row { padding: 6px 10px 6px 12px; }
+    .rest-line { padding: 8px 14px; border-top: 0; }
+    .sum-line { padding: 6px 14px; border-top: 0; }
+
+    /* Details as quiet text, not boxes. */
+    .facts, .section.suggest .facts { background: none; padding: 0; border-radius: 0; margin-top: 6px; }
+    .tag, .tag.area {
+      background: none; padding: 0; margin: 0; border-radius: 0; outline: 0;
+      font-size: 12px; color: var(--muted);
+    }
+    .tag + .tag::before { content: '·'; padding: 0 6px; color: var(--muted); }
+    .tag.area { color: var(--text); font-weight: 600; }
+    .tag.later { color: hsl(35 55% 42%); }
+    .tag.other { color: hsl(35 60% 42%); }
+    .pill { background: none; border: 0; padding: 2px 0; min-width: 0; color: var(--muted); font-weight: 600; }
+    .mini, .rest-edit-btn, .rest-line .jump { border-radius: 8px; }
+
+    /* One-tap Today / Next. */
+    .quick { grid-column: 1 / -1; display: flex; gap: 6px; margin-top: 8px; }
+    .q-btn {
+      height: 32px; padding: 0 12px; font-size: 13px; font-weight: 600;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: transparent; color: var(--text);
+    }
+    .q-btn.on {
+      border-color: transparent;
+      background: color-mix(in srgb, var(--z-today) 18%, var(--card)); color: var(--text);
+    }
+    .q-btn:disabled { opacity: 0.7; }
+    .quick.compact { margin: 0 0 0 auto; flex: 0 0 auto; gap: 4px; }
+    .quick.compact .q-btn { height: 30px; padding: 0 9px; font-size: 12px; }
+    .pick-row .pr-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .pick-row .pr-meta { text-align: left; }
   </style>
 </head>
 
@@ -1033,12 +1095,38 @@
       renderPickBar();
     }
 
-    // Compact one-line row: checkbox · name · why. Tapping anywhere toggles it.
+    // One-tap add for a single exercise: Today / Next. Tapping the active
+    // one takes it back off that list.
+    function quickAdd(ex, compact) {
+      const box = el('div', 'quick' + (compact ? ' compact' : ''));
+      const inToday = todayKeys.has(ex.key);
+      const inNext = upNextKeys.has(ex.key);
+      [['today', inToday, 'Today', 'Added to today: '], ['next', inNext, 'Next', 'Up next: ']].forEach(([to, on, label, msg]) => {
+        const b = el('button', 'q-btn' + (on ? ' on' : ''), (on ? '✓ ' : '+ ') + label);
+        b.type = 'button';
+        // In Today via the plan or a log (not a pick) — nothing to undo here.
+        if (on && to === 'today' && !todayPicks().some(it => (findEx(Object.values(exByKey), it) || {}).key === ex.key)) b.disabled = true;
+        b.title = on ? 'Remove from ' + (to === 'today' ? 'today' : 'Up next') : 'Add to ' + (to === 'today' ? 'today' : 'Up next');
+        b.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          savePicks(movePicks([ex.key], on ? null : to), on ? 'Removed: ' + ex.name : msg + ex.name);
+        });
+        box.append(b);
+      });
+      return box;
+    }
+
+    // Compact one-line row: checkbox · name · why · Today / Next.
+    // Tapping the row toggles the checkbox (bulk); the buttons act alone.
     function pickRow(ex, metaText) {
       const row = el('label', 'pick-row' + (isDoneToday(ex) ? ' done' : '') + (picked.has(ex.key) ? ' sel' : ''));
       row.dataset.key = ex.key;
       row.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
-      row.append(pickBox(ex), el('span', 'pr-name', (isDoneToday(ex) ? '✓ ' : '') + ex.name), el('span', 'pr-meta', metaText));
+      const txt = el('span', 'pr-text');
+      txt.append(el('span', 'pr-name', (isDoneToday(ex) ? '✓ ' : '') + ex.name), el('span', 'pr-meta', metaText));
+      row.append(pickBox(ex), txt);
+      if (!isDoneToday(ex)) row.append(quickAdd(ex, true));
       return row;
     }
 
@@ -1046,7 +1134,6 @@
       const g = ex.suggestGroup;
       const parts = [ex.category];
       if (g && g.name !== ex.area) parts.push(g.name + ' ' + (g.since == null ? 'no log' : g.since + 'd'));
-      if (upNextKeys.has(ex.key)) parts.push('up next');
       return parts.join(' · ');
     }
 
@@ -1439,7 +1526,6 @@
           meta.append(el('span', 'tag', g.name + ' · ' + (g.since == null ? 'no log' : g.since + 'd')));
         }
         meta.append(el('span', 'tag', ex.category));
-        if (upNextKeys.has(ex.key)) meta.append(el('span', 'tag', 'Up next'));
         if (ex.why && !isDoneToday(ex)) meta.append(el('span', 'tag later', 'Later · ' + ex.why));
       }
       if (showTags) meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
@@ -1458,15 +1544,8 @@
           meta.append(later, del);
         }
       }
-      if (!ex.plan) {
-        const inToday = todayKeys.has(ex.key);
-        const add = el('button', 'mini add-today', inToday ? '✓ Today' : '+ Today');
-        add.type = 'button';
-        add.disabled = inToday;
-        add.addEventListener('click', () => savePicks(movePicks([ex.key], 'today'), 'Added to today: ' + ex.name));
-        meta.append(add);
-      }
       if (meta.childNodes.length) card.append(meta);
+      if (!ex.plan) card.append(quickAdd(ex));
       const history = historyLine(ex);
       if (history) card.append(history);
       if (ex.plan && ex.plan.note) card.append(el('div', 'ex-note', ex.plan.note));
