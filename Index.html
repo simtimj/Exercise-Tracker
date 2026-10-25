@@ -608,6 +608,22 @@
     .quick.compact .q-btn { height: 30px; padding: 0 9px; font-size: 12px; }
     .pick-row .pr-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
     .pick-row .pr-meta { text-align: left; }
+
+    /* Card layout: details on the left, days + quick buttons stacked on
+       the right so the card is balanced; log box spans the full width. */
+    .ex { grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; }
+    .ex > .ex-name, .ex > .ex-meta, .ex > .facts { grid-column: 1; }
+    .ex > .side {
+      grid-column: 2; grid-row: 1 / span 3; align-self: start;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    }
+    .ex > .ex-note, .ex > .log { grid-column: 1 / -1; }
+    .ex .side .pill { padding: 0; line-height: 1.25; }
+    .ex .side .quick { flex-direction: column; align-items: stretch; gap: 4px; margin: 0; }
+
+    /* Smaller quick buttons. */
+    .q-btn { height: 26px; padding: 0 8px; font-size: 12px; font-weight: 600; border-radius: 6px; white-space: nowrap; }
+    .quick.compact .q-btn { height: 26px; padding: 0 7px; font-size: 11.5px; }
   </style>
 </head>
 
@@ -1525,7 +1541,10 @@
         lab.append(pickBox(ex), document.createTextNode(ex.name));
         nameEl.append(lab);
       } else nameEl.textContent = ex.name;
-      card.append(nameEl, el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days)));
+      // Right column: days since, then the one-tap Today / Next buttons.
+      const side = el('div', 'side');
+      side.append(el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days)));
+      card.append(nameEl, side);
 
       const meta = el('div', 'ex-meta');
       if (ex.suggest) {
@@ -1556,7 +1575,7 @@
         }
       }
       if (meta.childNodes.length) card.append(meta);
-      if (!ex.plan) card.append(quickAdd(ex));
+      if (!ex.plan) side.append(quickAdd(ex));
       const history = historyLine(ex);
       if (history) card.append(history);
       if (ex.plan && ex.plan.note) card.append(el('div', 'ex-note', ex.plan.note));
