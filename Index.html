@@ -309,11 +309,15 @@
       display: flex; align-items: center; gap: 8px;
       font-size: 12px; font-weight: 600;
     }
-    .pt-line .pt-label { white-space: nowrap; }
+    .pt-line .pt-label { white-space: nowrap; min-width: 6.8em; }
     .pt-line .pt-count { white-space: nowrap; color: var(--muted); font-weight: 500; }
     .pt-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
     .pt-bar span { display: block; height: 100%; background: hsl(120 var(--heat-sat) var(--heat-light)); }
     .pt-bar.all span { background: hsl(140 55% 42%); }
+    /* Bonus line: same shape, quieter — optional, not a to-do. */
+    .pt-line.bonus { margin-top: 6px; font-weight: 500; color: var(--muted); }
+    .pt-line.bonus .pt-bar { height: 4px; }
+    .pt-line.bonus .pt-bar span { background: hsl(210 var(--heat-sat) var(--heat-light)); }
     .pt-chips {
       display: flex; gap: 6px; margin-top: 6px;
       overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
@@ -693,6 +697,20 @@
           chips.append(chip);
         });
       strip.append(chips);
+
+      // Bonus: everything that isn't PT. Nice to have, not required.
+      const extra = [].concat(...sections.filter(s => s.name !== 'PT').map(s => s.exercises));
+      if (extra.length) {
+        const hit = extra.filter(ex => ex.weekDone > 0).length;
+        const bLine = el('div', 'pt-line bonus');
+        const bBar = el('div', 'pt-bar');
+        const bFill = el('span');
+        bFill.style.width = Math.round(100 * hit / extra.length) + '%';
+        bBar.append(bFill);
+        bLine.append(el('span', 'pt-label', 'Bonus'), bBar,
+          el('span', 'pt-count', hit ? '+' + hit + ' of ' + extra.length : '0 of ' + extra.length));
+        strip.append(bLine);
+      }
     }
 
     function jumpTo(key) {
