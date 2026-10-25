@@ -76,6 +76,9 @@
 
     #status { color: var(--muted); font-size: 12px; text-align: right; }
 
+    .view-tabs { display: flex; gap: 4px; flex-shrink: 0; }
+    .view-tabs .notes-btn { padding: 5px 9px; }
+    header .notes-btn.active { background: var(--z-today); border-color: var(--z-today); color: #fff; }
     header .notes-btn {
       padding: 6px 10px;
       border: 1px solid var(--border);
@@ -113,7 +116,7 @@
     }
 
     /* Pick view: compact rows, no jump buttons. */
-    body.pick-view .controls { display: none; }
+    body.pick-view .controls, body.today-view .controls { display: none; }
     .pv-row { min-height: 40px; cursor: default; }
     .pv-row .quick.compact { display: flex; gap: 4px; }
     .pv-row .quick.compact .quick.compact { margin: 0; }
@@ -648,8 +651,11 @@
     <header>
       <h1>Exercise Tracker</h1>
       <div id="status">Loading…</div>
-      <button class="notes-btn" id="view-toggle" type="button">Pick view</button>
-      <button class="notes-btn" id="notes-open" type="button">Notes</button>
+      <div class="view-tabs" id="view-tabs">
+        <button class="notes-btn" data-view="full" type="button">Full</button>
+        <button class="notes-btn" data-view="pick" type="button">Pick</button>
+        <button class="notes-btn" data-view="today" type="button">Today</button>
+      </div>
     </header>
 
     <div class="controls">
@@ -1221,11 +1227,17 @@
       };
     }
 
+    // Shows the change right away, then saves; the server's copy replaces
+    // it when it comes back, and a failure puts the old picks back.
     function savePicks(p, msg) {
-      setStatus('Saving…');
+      const before = data.picks;
+      data.picks = { today: p.today.items, next: p.next };
+      picked.clear();
+      render();
+      setStatus(msg || 'Saving…');
       google.script.run
-        .withSuccessHandler(result => { data = result; picked.clear(); render(); setStatus(msg); })
-        .withFailureHandler(err => setStatus('Error: ' + err.message))
+        .withSuccessHandler(result => { data = result; render(); setStatus(msg); })
+        .withFailureHandler(err => { data.picks = before; render(); setStatus('Error: ' + err.message); })
         .savePicks(p);
     }
 
@@ -1723,11 +1735,20 @@
     // ---------- Pick view (experiment, 2026-10-25) ----------
     // Small and concise: Today, Up next, Suggested as one-line rows.
     // No logging here — rows only move exercises between the lists.
-    let pickView = false;
-    try { pickView = localStorage.getItem('pickView') === '1'; } catch (e) {}
-    document.getElementById('view-toggle').addEventListener('click', () => {
-      pickView = !pickView;
-      try { localStorage.setItem('pickView', pickView ? '1' : '0'); } catch (e) {}
+    // Header view tabs (2026-10-25): Full (everything), Pick (compact
+    // choosing), Today (full cards with logging for today + Up next).
+    let view = 'full';
+    try {
+      view = localStorage.getItem('view') || (localStorage.getItem('pickView') === '1' ? 'pick' : 'full');
+    } catch (e) {}
+    if (!['full', 'pick', 'today'].includes(view)) view = 'full';
+    let pickView = view === 'pick';
+    document.getElementById('view-tabs').addEventListener('click', e => {
+      const v = e.target.dataset && e.target.dataset.view;
+      if (!v || v === view) return;
+      view = v;
+      pickView = view === 'pick';
+      try { localStorage.setItem('view', view); } catch (e) {}
       render();
       window.scrollTo(0, 0);
     });
@@ -1847,12 +1868,22 @@
       upNextKeys = new Set(upNext.map(ex => ex.key));
       todayKeys = new Set(plannedExercises(sections).map(ex => ex.key));
       renderPickBar();
-      document.body.classList.toggle('pick-view', pickView);
-      document.getElementById('view-toggle').textContent = pickView ? 'Full view' : 'Pick view';
+      document.body.classList.toggle('pick-view', view === 'pick');
+      document.body.classList.toggle('today-view', view === 'today');
+      document.querySelectorAll('#view-tabs [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
       if (data.renames && data.renames.length) wrap.append(renameBanner(data.renames));
       if (pickView) {
         const base = buildSections();
         pickViewSections(base, upNext).forEach(n => wrap.append(n));
+        setTopHeight();
+        return;
+      }
+      if (view === 'today') {
+        // Today focus: full cards (facts + log box) for today, Up next below.
+        const base = buildSections();
+        wrap.append(sectionEl({ id: 'today-sec', name: 'Today', exercises: plannedExercises(base), wide: true, focus: true,
+          emptyText: 'Nothing for today yet. Add some from Pick or Full view.' }));
+        wrap.append(upNextSection(upNext));
         setTopHeight();
         return;
       }
@@ -2016,7 +2047,9 @@
     }
 
     const closeNotes = () => document.body.classList.remove('notes-open');
-    document.getElementById('notes-open').addEventListener('click', openNotes);
+    // Notes button removed from the header (2026-10-25); panel code kept.
+    const notesBtn = document.getElementById('notes-open');
+    if (notesBtn) notesBtn.addEventListener('click', openNotes);
     document.getElementById('notes-close').addEventListener('click', closeNotes);
     document.getElementById('notes-shade').addEventListener('click', closeNotes);
     document.getElementById('notes-form').addEventListener('submit', e => {

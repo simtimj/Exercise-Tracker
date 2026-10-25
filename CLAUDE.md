@@ -94,7 +94,9 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 
 ## Pick view (experiment, 2026-10-25)
 
-- Header button `Pick view` / `Full view` toggles `pickView` (localStorage `pickView`). Pick view hides the jump buttons and shows only three compact sections of one-line `pv-row`s, no logging: **Today** (`→ Next` / `✕` on picked items), **Up next** (`+ Today` / `✕`), **Suggested** (PT block + area blocks, each row with `+ Today` / `+ Next` via `quickAdd`; done-today items hidden). Code: `pickViewSections()`; `render()` returns early when `pickView` is on.
+- **View tabs (2026-10-25):** the header has three tabs, `Full` · `Pick` · `Today` (`#view-tabs`, state `view` in localStorage `view`, falls back to the old `pickView` key; active tab filled with `--z-today`). The Notes button was removed from the header (panel code and server functions kept, guarded). **Today** view = only the Today section as full cards (facts + Weight/Sets log boxes, `sectionEl(... focus: true)`) with Up next below; jump buttons hidden (`body.today-view`). Julius may add more to it later.
+- Picks are optimistic: `savePicks()` sets `data.picks` and re-renders immediately, then the server copy replaces it (failure restores the old picks), so + Today / + Next show at once.
+- Pick view (`view === 'pick'`, `pickView`) Pick view hides the jump buttons and shows only three compact sections of one-line `pv-row`s, no logging: **Today** (`→ Next` / `✕` on picked items), **Up next** (`+ Today` / `✕`), **Suggested** (PT block + area blocks, each row with `+ Today` / `+ Next` via `quickAdd`; done-today items hidden). Code: `pickViewSections()`; `render()` returns early when `pickView` is on.
 
 ## This week summary (2026-10-25)
 
