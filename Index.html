@@ -297,6 +297,34 @@
     .section.summary { --zone: var(--z-next); }
     .section.summary .chev { font-size: 11px; color: var(--muted); }
     .sum-line { margin: 0; padding: 8px 12px; font-size: 14px; line-height: 1.45; border-top: 1px solid var(--border); }
+    /* Main idea first: bold + underlined, details muted underneath. */
+    .key {
+      font-weight: 700; color: var(--text);
+      text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px;
+      text-decoration-color: color-mix(in srgb, var(--zone) 70%, var(--text));
+    }
+    .sum-line .key { font-size: 15px; }
+    .sum-body { margin-top: 4px; color: var(--muted); font-size: 13.5px; }
+    .sub-rest { font-weight: 500; color: var(--muted); }
+
+    /* Streamlined: This week + Suggested are one flat panel — no boxes
+       inside the box. Blocks are split by a label and a thin rule. */
+    .section.summary .grp, .section.suggest .grp {
+      margin: 0; border: 0; border-radius: 0; overflow: visible; background: transparent;
+      border-top: 1px solid var(--border);
+    }
+    .section.summary .grp > .sub, .section.suggest .grp > .sub {
+      background: transparent; box-shadow: none; padding: 12px 12px 4px;
+      font-size: 12px; color: var(--text);
+    }
+    .section.summary .grp > .sub + .sum-line { padding-top: 4px; }
+    .section.summary .sum-line + .sum-line { border-top: 0; padding-top: 6px; }
+    .section.suggest .grp > .ex, .section.suggest .grp > .pick-row { background: transparent; border-top: 0; }
+    .section.suggest .grp > .ex + .ex, .section.suggest .grp > .pick-row + .pick-row {
+      border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    }
+    .section.suggest .facts { background: none; padding: 2px 0 0; border-radius: 0; }
+    .section.suggest .log input, .section.suggest .log button { background: var(--card); }
     .grp > .sub + .sum-line { border-top: 0; }
     .grp {
       margin: 8px; border: 1px solid var(--border); border-radius: 10px;
@@ -1121,7 +1149,9 @@
       // PT block: always first.
       if (sug.pt.length) {
         const sub = el('div', 'sub sug-sub pt-head');
-        sub.append(el('span', '', 'PT — do these first'),
+        const lbl = el('span', '');
+        lbl.append(el('strong', 'key', 'PT'), el('span', 'sub-rest', ' — do these first'));
+        sub.append(lbl,
           el('span', '', sug.pt.filter(isDoneToday).length + ' / ' + sug.pt.length + ' done'));
         secEl.append(sub);
         sug.pt.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true)
@@ -1135,7 +1165,9 @@
       sug.blocks.forEach((b, i) => {
         const a = b.area;
         const sub = el('div', 'sub sug-sub area-head');
-        sub.append(el('span', '', (i + 1) + '. ' + a.name + ' · ' + (a.since == null ? 'no log' : a.since + 'd since')),
+        const lbl = el('span', '');
+        lbl.append(el('strong', 'key', (i + 1) + '. ' + a.name), el('span', 'sub-rest', ' · ' + (a.since == null ? 'no log' : a.since + 'd since')));
+        sub.append(lbl,
           el('span', '', b.items.filter(isDoneToday).length + ' / ' + b.items.length + ' done'));
         secEl.append(sub);
         b.items.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true) : pickRow(ex, pickMeta(ex))));
@@ -1239,29 +1271,30 @@
       const tips = [];
       const total = logs.length;
       if (!total) {
-        good.push('Nothing logged in the last ' + SUMMARY_DAYS + ' days. No judgment — today is a good day to restart, PT first.');
+        good.push({ head: 'Nothing logged yet', body: 'Nothing in the last ' + SUMMARY_DAYS + ' days. No judgment — today is a good day to restart, PT first.' });
       } else {
         const parts = worked.map(a => amountWords(a.n) + ' ' + AREA_WORDS[a.name] + ' (' + a.n + ' exercise'
           + (a.n === 1 ? '' : 's') + ', ' + a.days.size + ' day' + (a.days.size === 1 ? '' : 's') + ')');
-        good.push((total >= 6 ? 'Nice — ' : total >= 3 ? 'Good work — ' : 'Good start — ') + 'in the last ' + SUMMARY_DAYS + ' days you put in ' + listText(parts) + '.');
+        good.push({ head: (total >= 6 ? 'Nice' : total >= 3 ? 'Good work' : 'Good start') + ' — ' + total + ' exercise' + (total === 1 ? '' : 's') + ' logged',
+          body: 'You put in ' + listText(parts) + '.' });
       }
 
       // PT: praise only what's real; what's missing goes to suggestions.
       const pt = (sections.find(s => s.name === 'PT') || { exercises: [] }).exercises;
       const met = pt.filter(ex => ex.met).length;
       const started = pt.filter(ex => !ex.met && ex.weekDone > 0).length;
-      if (pt.length && met === pt.length) good.push('All your PT is done for the week — great consistency.');
-      else if (met) good.push('You\'ve finished ' + met + ' of ' + pt.length + ' PT exercises for the week' + (started ? ', and ' + started + ' more are started.' : '.'));
-      else if (started) good.push('PT is underway: ' + started + ' of ' + pt.length + ' started this week.');
+      if (pt.length && met === pt.length) good.push({ head: 'All PT done', body: 'Every PT exercise hit its goal this week — great consistency.' });
+      else if (met) good.push({ head: 'PT ' + met + ' of ' + pt.length + ' done', body: 'Finished for the week' + (started ? ', and ' + started + ' more are started.' : '.') });
+      else if (started) good.push({ head: 'PT underway', body: started + ' of ' + pt.length + ' started this week.' });
 
       // Suggestions, most important first.
       const owed = sug.pt.filter(ex => !isDoneToday(ex));
       if (owed.length) {
         const now = owed.filter(ex => !ex.why).slice(0, 2).map(ex => ex.name);
-        tips.push('PT comes first: ' + owed.length + ' exercise' + (owed.length === 1 ? '' : 's') + ' still need a session this week'
-          + (now.length ? ' — start with ' + listText(now) + '.' : '. The areas are resting today, so pick them up when they\'re ready.'));
+        tips.push({ head: 'PT first — ' + owed.length + ' still owed',
+          body: (now.length ? 'Start with ' + listText(now) + '.' : 'Those areas are resting today, so pick them up when they\'re ready.') });
       } else if (pt.length && met < pt.length) {
-        tips.push('PT is on track for today — the rest is due after a rest day.');
+        tips.push({ head: 'PT on track today', body: 'The rest is due after a rest day.' });
       }
 
       const overdue = Object.keys(since).filter(a => a !== 'Other' && (since[a] == null || since[a] >= OVERDUE_DAYS))
@@ -1269,25 +1302,33 @@
       overdue.forEach(a => {
         const block = sug.blocks.find(b => b.area.name === a);
         const tryNames = block ? block.items.map(ex => ex.name) : [];
-        const detail = AREA_DETAIL[a] ? ' (' + AREA_DETAIL[a] + ')' : '';
-        tips.push((since[a] == null ? 'You haven\'t logged any ' + AREA_WORDS[a] + detail + ' yet.'
-          : 'It\'s been ' + since[a] + ' days since you did any ' + AREA_WORDS[a] + detail + '.')
-          + (tryNames.length ? ' Try ' + (tryNames.length === 1 ? tryNames[0]
-            : tryNames.slice(0, -1).join(', ') + ' or ' + tryNames[tryNames.length - 1]) + '.' : ''));
+        const label = AREA_WORDS[a].charAt(0).toUpperCase() + AREA_WORDS[a].slice(1);
+        tips.push({ head: label + ' — ' + (since[a] == null ? 'no log yet' : since[a] + ' days'),
+          body: (AREA_DETAIL[a] ? AREA_DETAIL[a].charAt(0).toUpperCase() + AREA_DETAIL[a].slice(1) + '. ' : '')
+            + (tryNames.length ? 'Try ' + (tryNames.length === 1 ? tryNames[0]
+              : tryNames.slice(0, -1).join(', ') + ' or ' + tryNames[tryNames.length - 1]) + '.' : '') });
       });
 
       // Lopsided week: one area is half or more of the work.
       if (total >= 4 && worked[0].n / total > 0.5 && overdue.length) {
-        tips.push('Most of your recent work has been ' + AREA_WORDS[worked[0].name] + ' — mixing in '
-          + AREA_WORDS[overdue[0]] + ' would even things out.');
+        tips.push({ head: 'Even it out', body: 'Most of your recent work has been ' + AREA_WORDS[worked[0].name] + ' — mixing in '
+          + AREA_WORDS[overdue[0]] + ' would balance things.' });
       }
-      if (!tips.length) tips.push('Nothing overdue — keep following Suggested.');
+      if (!tips.length) tips.push({ head: 'Nothing overdue', body: 'Keep following Suggested.' });
       return { good, tips };
     }
 
     // Folded state is remembered per device (localStorage, best-effort).
     let summaryOpen = true;
     try { summaryOpen = localStorage.getItem('summaryOpen') !== '0'; } catch (e) {}
+
+    // One summary point: bold underlined main idea, details underneath.
+    function sumLine(t) {
+      const p = el('div', 'sum-line');
+      p.append(el('strong', 'key', t.head));
+      if (t.body) p.append(el('div', 'sum-body', t.body));
+      return p;
+    }
 
     function summarySection(sections) {
       const sum = weekSummary(sections);
@@ -1306,7 +1347,7 @@
       secEl.append(head);
       if (!summaryOpen) {
         // Folded: just the top suggestion.
-        secEl.append(el('p', 'sum-line', sum.tips[0]));
+        secEl.append(sumLine(sum.tips[0]));
         return secEl;
       }
       [['Going well', sum.good], ['Suggestions', sum.tips]].forEach(([label, lines]) => {
@@ -1314,7 +1355,7 @@
         const sub = el('div', 'sub');
         sub.append(el('span', '', label));
         secEl.append(sub);
-        lines.forEach(t => secEl.append(el('p', 'sum-line', t)));
+        lines.forEach(t => secEl.append(sumLine(t)));
       });
       return boxGroups(secEl);
     }
