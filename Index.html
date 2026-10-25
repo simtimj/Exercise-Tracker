@@ -112,6 +112,11 @@
       box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
     }
 
+    /* Pick view: compact rows, no jump buttons. */
+    body.pick-view .controls { display: none; }
+    .pv-row { min-height: 40px; cursor: default; }
+    .pv-row .quick.compact { display: flex; gap: 4px; }
+    .pv-row .quick.compact .quick.compact { margin: 0; }
     .legend.wide { grid-column: 1 / -1; margin: -12px 2px 0; }
     .legend {
       display: flex;
@@ -633,6 +638,7 @@
     <header>
       <h1>Exercise Tracker</h1>
       <div id="status">Loading…</div>
+      <button class="notes-btn" id="view-toggle" type="button">Pick view</button>
       <button class="notes-btn" id="notes-open" type="button">Notes</button>
     </header>
 
@@ -1653,6 +1659,101 @@
       card.classList.add('flash');
     }
 
+    // ---------- Pick view (experiment, 2026-10-25) ----------
+    // Small and concise: Today, Up next, Suggested as one-line rows.
+    // No logging here — rows only move exercises between the lists.
+    let pickView = false;
+    try { pickView = localStorage.getItem('pickView') === '1'; } catch (e) {}
+    document.getElementById('view-toggle').addEventListener('click', () => {
+      pickView = !pickView;
+      try { localStorage.setItem('pickView', pickView ? '1' : '0'); } catch (e) {}
+      render();
+      window.scrollTo(0, 0);
+    });
+
+    function pvMeta(ex) {
+      return ex.category + ' · ' + (ex.noDate ? 'no date' : daysLabel(ex.days));
+    }
+
+    function pvButton(label, title, fn) {
+      const b = el('button', 'q-btn', label);
+      b.type = 'button';
+      b.title = title;
+      b.addEventListener('click', fn);
+      return b;
+    }
+
+    function pvRow(ex, meta, buttons) {
+      const row = el('div', 'pick-row pv-row' + (isDoneToday(ex) ? ' done' : ''));
+      row.dataset.key = ex.key;
+      row.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
+      const txt = el('span', 'pr-text');
+      txt.append(el('span', 'pr-name', (isDoneToday(ex) ? '✓ ' : '') + ex.name), el('span', 'pr-meta', meta));
+      row.append(txt);
+      if (buttons.length) {
+        const box = el('div', 'quick compact');
+        box.append(...buttons);
+        row.append(box);
+      }
+      return row;
+    }
+
+    function pvSection(id, cls, title, count) {
+      const secEl = el('section', 'section wide ' + cls);
+      secEl.id = id;
+      const head = el('div', 'section-head');
+      head.append(el('span', 'section-name', title), el('span', 'section-count', count));
+      secEl.append(head);
+      return secEl;
+    }
+
+    function pickViewSections(base, upNext) {
+      const out = [];
+
+      // Today
+      const planned = plannedExercises(base);
+      const done = planned.filter(isDoneToday).length;
+      const t = pvSection('today-sec', 'focus', 'Today', planned.length ? done + ' / ' + planned.length + ' done' : '');
+      if (!planned.length) t.append(el('p', 'empty small', 'Nothing yet — add from Suggested below.'));
+      planned.forEach(ex => {
+        const btns = [];
+        if (ex.plan && ex.plan.picked && !isDoneToday(ex)) {
+          btns.push(pvButton('→ Next', 'Move to Up next', () => savePicks(movePicks([ex.key], 'next'), 'Up next: ' + ex.name)),
+            pvButton('✕', 'Remove from today', () => savePicks(movePicks([ex.key], null), 'Removed: ' + ex.name)));
+        }
+        t.append(pvRow(ex, pvMeta(ex), btns));
+      });
+      out.push(t);
+
+      // Up next
+      const n = pvSection('next-sec', 'upnext', 'Up next', upNext.length ? String(upNext.length) : '');
+      if (!upNext.length) n.append(el('p', 'empty small', 'Nothing queued.'));
+      upNext.forEach(ex => n.append(pvRow(ex, pvMeta(ex), [
+        pvButton('+ Today', 'Move to today', () => savePicks(movePicks([ex.key], 'today'), 'Moved to today: ' + ex.name)),
+        pvButton('✕', 'Remove from Up next', () => savePicks(movePicks([ex.key], null), 'Removed: ' + ex.name)),
+      ])));
+      out.push(n);
+
+      // Suggested: tap to add, nothing logged here.
+      const sug = suggestedExercises(base);
+      const s = pvSection('suggest-sec', 'suggest', 'Suggested', '');
+      const block = (label, rest, items, metaFn) => {
+        if (!items.length) return;
+        const sub = el('div', 'sub sug-sub');
+        const lbl = el('span', '');
+        lbl.append(el('strong', 'key', label), el('span', 'sub-rest', rest));
+        sub.append(lbl);
+        s.append(sub);
+        items.filter(ex => !isDoneToday(ex)).forEach(ex => s.append(pvRow(ex, metaFn(ex), [quickAdd(ex, true)])));
+      };
+      block('PT', ' — do these first', sug.pt, ex => ex.why ? 'Later · ' + ex.why : pickMeta(ex));
+      sug.blocks.forEach((b, i) => block((i + 1) + '. ' + b.area.name,
+        ' · ' + (b.area.since == null ? 'no log' : b.area.since + 'd since'), b.items, pickMeta));
+      if (s.children.length === 1) s.append(el('p', 'empty small', 'Nothing to suggest right now.'));
+      out.push(boxGroups(s));
+      return out;
+    }
+
     function render() {
       const wrap = document.getElementById('groups');
       wrap.innerHTML = '';
@@ -1666,6 +1767,14 @@
       upNextKeys = new Set(upNext.map(ex => ex.key));
       todayKeys = new Set(plannedExercises(sections).map(ex => ex.key));
       renderPickBar();
+      document.body.classList.toggle('pick-view', pickView);
+      document.getElementById('view-toggle').textContent = pickView ? 'Full view' : 'Pick view';
+      if (pickView) {
+        const base = buildSections();
+        pickViewSections(base, upNext).forEach(n => wrap.append(n));
+        setTopHeight();
+        return;
+      }
       if (sortMode === 'days') {
         // One list, most days since first; exercises with no date at the bottom.
         all.sort((a, b) => b.days - a.days || a.noDate - b.noDate || a.firstRow - b.firstRow);

@@ -90,6 +90,10 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - One-tap add (2026-10-25): `quickAdd(ex, compact)` puts `+ Today` / `+ Next` buttons on every card not in Today (and compact ones on collapsed Suggested `pick-row`s, which keep their checkbox for bulk). Tapping an active `✓ Today` / `✓ Next` removes it; `✓ Today` is disabled when it came from the plan or a log, not a pick. Card layout: details (name, tags, facts) in the left column; a right `.side` column stacks the days count and small Today / Next buttons; log box spans full width.
 - Streamlined look (2026-10-25, Julius: no "rounded squares inside rounded squares", follow best practices): one level of rounding — each section is a single rounded white panel (pinned zones get a 3px colored top border); inside everything is flat: groups split by a small label + hairline, rows by hairlines, tags as plain `·`-separated text, days pill as plain text, no facts box. These overrides sit at the end of the `<style>` block.
 
+## Pick view (experiment, 2026-10-25)
+
+- Header button `Pick view` / `Full view` toggles `pickView` (localStorage `pickView`). Pick view hides the jump buttons and shows only three compact sections of one-line `pv-row`s, no logging: **Today** (`→ Next` / `✕` on picked items), **Up next** (`+ Today` / `✕`), **Suggested** (PT block + area blocks, each row with `+ Today` / `+ Next` via `quickAdd`; done-today items hidden). Code: `pickViewSections()`; `render()` returns early when `pickView` is on.
+
 ## This week summary (2026-10-25)
 
 - "This week" card at the very top (`summarySection()` / `weekSummary()`, above Today; collapsible, folded state in localStorage `summaryOpen`, folded = top suggestion only). Two parts, rule-based, no AI:
