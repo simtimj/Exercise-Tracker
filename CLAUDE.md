@@ -71,6 +71,12 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - Items logged today drop to the bottom of Suggested and dim, like the Focus table.
 - Test with the real sheet CSV via jsdom (export via the Drive connector `download_file_content` with `text/csv`), then ship.
 
+## Suggested — split by category (2026-10-25, later the same day)
+
+- Julius uses Suggested most of the time, so it's open by default (even with a plan) with a solid accent border. Three subheads in priority order: **PT → Compound → Isolation** (the only three categories; the sheet's Abs section counts as Isolation via `categoryOf()`).
+- PT: every PT exercise short of its weekly goal is either suggested (area ready + not done yesterday, `byNeglect` order, max 6) or listed under it as `Also due this week: <name> — <why>` (area resting until X / rest day / next up), so no PT gets lost. Compound (max 3) then Isolation (max 3): one per ready area not already covered by a pick above, from that area's most neglected group.
+- `Longest since` areas and the due-this-week items are tappable chips: an area jumps to its suggested card (else its first Category card, `jumpToArea()`), a due PT item jumps to its Category card (`jumpTo()`). Cards carry `data-area`.
+
 ## Editable recovery days (2026-10-25)
 
 - "Rest days ✎" button on the Suggested section's Resting line opens an inline editor: one −/+ stepper per area (1–14 days), "default N" shown when changed, Save / Defaults.

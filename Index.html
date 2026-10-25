@@ -268,8 +268,16 @@
     .section.focus .section-head { background: var(--soft); }
 
     /* Suggested — today: picked from rested body areas. */
-    .section.suggest { border: 1.5px dashed var(--muted); }
-    .section.suggest .section-head { background: var(--soft); cursor: pointer; }
+    .section.suggest { border: 2px solid var(--accent); }
+    .section.suggest .section-head { background: color-mix(in srgb, var(--accent) 18%, var(--card)); cursor: pointer; font-weight: 700; }
+    .section.suggest.collapsed .sug-sub, .section.suggest.collapsed .rest-edit { display: none; }
+    .sug-sub { font-weight: 700; }
+    .rest-line .jump {
+      margin: 2px 4px 2px 0; padding: 2px 9px; font-size: 12px;
+      border: 1px solid var(--border); border-radius: 999px;
+      background: var(--card); color: var(--text); text-align: left;
+    }
+    .pt-due .jump { border-color: hsl(40 60% 55%); }
     .section.suggest.collapsed .ex, .section.suggest.collapsed .rest-line { display: none; }
     .section.suggest .chev { font-size: 11px; color: var(--muted); margin-left: 6px; }
     .rest-line {
@@ -729,9 +737,10 @@
     // ---------- Suggested exercises ----------
     // Picked "as of this morning": logs dated today are ignored for readiness,
     // so the list doesn't reshuffle as he logs. Done-today items sink and dim.
-    const SUGGEST_PT_MAX = 4;
-    const SUGGEST_BONUS_MAX = 3;
-    const SUGGEST_MAX = 7;
+    // Priority: PT > Compound > Isolation (the sheet's Abs live in Isolation).
+    const SUGGEST_PT_MAX = 6;
+    const SUGGEST_COMPOUND_MAX = 3;
+    const SUGGEST_ISO_MAX = 3;
     const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     // Real days since this exercise before today, or null if never dated (a row
@@ -787,29 +796,42 @@
       // muscle group in it, then the exercise with the longest gap.
       const byNeglect = (a, b) => areaGap(b) - areaGap(a) || groupGap(b) - groupGap(a)
         || gap(b) - gap(a) || a.firstRow - b.firstRow;
+      const tag = ex => Object.assign({}, ex, { suggest: areas[ex.area], suggestGroup: groups[ex.group] });
+      const doneLast = list => list.filter(ex => !isDoneToday(ex)).concat(list.filter(isDoneToday));
 
-      // 1. PT: weekly goal not met (as of this morning), not done yesterday
-      //    (PT needs a rest day), area ready.
-      const pt = all.filter(ex => ex.category === 'PT' && !inPlan.has(ex.key) && ready(ex)
-        && ex.weekDone - ex.slots.filter(slotToday).length < ex.weekTarget
-        && !ex.slots.some(s => !s.noDate && s.days === 1))
-        .sort(byNeglect).slice(0, SUGGEST_PT_MAX);
+      // 1. PT: every PT exercise still short of its weekly goal (as of this
+      //    morning). Suggested when its area is ready and it wasn't done
+      //    yesterday (PT needs a rest day); the rest are listed as still due.
+      const ptOpen = all.filter(ex => ex.category === 'PT' && !inPlan.has(ex.key)
+        && ex.weekDone - ex.slots.filter(slotToday).length < ex.weekTarget).sort(byNeglect);
+      const restDay = ex => ex.slots.some(s => !s.noDate && s.days === 1);
+      const ptOk = ptOpen.filter(ex => ready(ex) && !restDay(ex));
+      const pt = ptOk.slice(0, SUGGEST_PT_MAX);
+      const ptDue = ptOpen.filter(ex => !pt.includes(ex)).map(ex => Object.assign({}, ex, {
+        why: !ready(ex) ? ex.area + ' resting until ' + areas[ex.area].until
+          : restDay(ex) ? 'rest day (done yesterday)' : 'next up',
+      }));
 
-      // 2. Bonus: one non-PT exercise per ready area not covered by PT — from
-      //    that area's most neglected group — most neglected areas first.
+      // 2–3. Compound, then Isolation: one exercise per ready area not already
+      //      covered above, from that area's most neglected group.
       const covered = new Set(pt.map(ex => ex.area));
-      const bestPerArea = {};
-      all.filter(ex => ex.category !== 'PT' && !inPlan.has(ex.key) && ready(ex) && !covered.has(ex.area))
-        .forEach(ex => {
-          const cur = bestPerArea[ex.area];
-          if (!cur || byNeglect(ex, cur) < 0) bestPerArea[ex.area] = ex;
-        });
-      const bonus = Object.values(bestPerArea).sort(byNeglect).slice(0, SUGGEST_BONUS_MAX);
+      function onePerArea(category, max) {
+        const best = {};
+        all.filter(ex => ex.category === category && !inPlan.has(ex.key) && ready(ex) && !covered.has(ex.area))
+          .forEach(ex => { if (!best[ex.area] || byNeglect(ex, best[ex.area]) < 0) best[ex.area] = ex; });
+        const picks = Object.values(best).sort(byNeglect).slice(0, max);
+        picks.forEach(ex => covered.add(ex.area));
+        return picks;
+      }
+      const compound = onePerArea('Compound', SUGGEST_COMPOUND_MAX);
+      const isolation = onePerArea('Isolation', SUGGEST_ISO_MAX);
 
-      const picks = pt.concat(bonus).slice(0, SUGGEST_MAX)
-        .map(ex => Object.assign({}, ex, { suggest: areas[ex.area], suggestGroup: groups[ex.group] }));
       return {
-        items: picks.filter(ex => !isDoneToday(ex)).concat(picks.filter(isDoneToday)),
+        parts: [
+          { name: 'PT', items: doneLast(pt.map(tag)), due: ptDue },
+          { name: 'Compound', items: doneLast(compound.map(tag)) },
+          { name: 'Isolation', items: doneLast(isolation.map(tag)) },
+        ],
         resting: Object.values(areas).filter(a => !a.ready),
         // Ready areas, longest since trained first — the "direction" line.
         neglected: Object.values(areas).filter(a => a.ready)
@@ -818,7 +840,75 @@
       };
     }
 
-    let suggestOpen = null; // null = default (open unless a plan exists)
+    let suggestOpen = true;
+
+    // Tapping an area in "Longest since": its first suggested card, else its
+    // first card in the Category view.
+    function jumpToArea(area) {
+      const sug = [...document.querySelectorAll('.section.suggest .ex')].find(c => c.dataset.area === area);
+      if (sug) return flashCard(sug);
+      if (sortMode !== 'category') setMode('category');
+      const card = [...document.querySelectorAll('.section:not(.focus):not(.suggest) .ex')].find(c => c.dataset.area === area);
+      if (card) flashCard(card);
+    }
+
+    function linkChip(text, onClick) {
+      const b = el('button', 'jump', text);
+      b.type = 'button';
+      b.addEventListener('click', e => { e.stopPropagation(); onClick(); });
+      return b;
+    }
+
+    function suggestSection(sections, hasPlan) {
+      const sug = suggestedExercises(sections);
+      const secEl = el('section', 'section wide suggest');
+      const open = suggestOpen;
+      if (!open) secEl.classList.add('collapsed');
+      const head = el('div', 'section-head');
+      const name = el('span', 'section-name', 'Suggested — today');
+      name.append(el('span', 'chev', open ? '▾' : '▸'));
+      const items = [].concat(...sug.parts.map(p => p.items));
+      const done = items.filter(isDoneToday).length;
+      head.append(name, el('span', 'section-count', items.length ? done + ' / ' + items.length + ' done' : ''));
+      head.addEventListener('click', () => { suggestOpen = !open; render(); });
+      secEl.append(head);
+
+      const sinceText = a => a.since == null ? 'no log' : a.since + 'd';
+      if (sug.neglected.length) {
+        const due = el('div', 'rest-line due-line');
+        due.append(el('b', '', 'Longest since: '));
+        sug.neglected.forEach(a => due.append(linkChip(a.name + ' ' + sinceText(a), () => jumpToArea(a.name))));
+        secEl.append(due);
+      }
+      const restParts = sug.resting.map(a => a.name + ' (until ' + a.until + ')');
+      const rest = el('div', 'rest-line', restParts.length ? 'Resting: ' + restParts.join(' · ') : 'Everything is rested.');
+      if (sug.unmapped.length) rest.append(el('span', 'unmapped', ' · Unmapped: ' + sug.unmapped.join(', ')));
+      const editBtn = el('button', 'rest-edit-btn', restEditOpen ? 'Done' : 'Rest days ✎');
+      editBtn.type = 'button';
+      editBtn.addEventListener('click', () => { restEditOpen = !restEditOpen; restDraft = null; render(); });
+      rest.append(editBtn);
+      secEl.append(rest);
+      if (restEditOpen) secEl.append(restEditor());
+
+      sug.parts.forEach(part => {
+        if (!part.items.length && !(part.due && part.due.length)) return;
+        const sub = el('div', 'sub sug-sub');
+        sub.append(el('span', '', part.name),
+          el('span', '', part.items.filter(isDoneToday).length + ' / ' + part.items.length + ' done'));
+        secEl.append(sub);
+        part.items.forEach(ex => secEl.append(exerciseCard(ex, false)));
+        if (part.due && part.due.length) {
+          const line = el('div', 'rest-line pt-due');
+          line.append(el('b', '', part.items.length ? 'Also due this week: ' : 'PT due this week: '));
+          part.due.forEach(ex => line.append(linkChip(ex.name + ' — ' + ex.why, () => jumpTo(ex.key))));
+          secEl.append(line);
+        }
+      });
+      if (!items.length && !sug.parts[0].due.length) {
+        secEl.append(el('p', 'empty', 'Nothing to suggest — every area is resting and this week\'s PT is done.'));
+      }
+      return secEl;
+    }
 
     // ---------- Recovery days editor ----------
     // Draft edits stay local until Save; saved values live server-side
@@ -869,40 +959,6 @@
       return box;
     }
 
-    function suggestSection(sections, hasPlan) {
-      const sug = suggestedExercises(sections);
-      const secEl = el('section', 'section wide suggest');
-      const open = suggestOpen == null ? !hasPlan : suggestOpen;
-      if (!open) secEl.classList.add('collapsed');
-      const head = el('div', 'section-head');
-      const name = el('span', 'section-name', 'Suggested — today');
-      name.append(el('span', 'chev', open ? '▾' : '▸'));
-      const done = sug.items.filter(isDoneToday).length;
-      head.append(name, el('span', 'section-count', sug.items.length ? done + ' / ' + sug.items.length + ' done' : ''));
-      head.addEventListener('click', () => { suggestOpen = !open; render(); });
-      secEl.append(head);
-
-      const restParts = sug.resting.map(a => a.name + ' (until ' + a.until + ')');
-      const sinceText = a => a.since == null ? 'no log' : a.since + 'd';
-      if (sug.neglected.length) {
-        const due = el('div', 'rest-line due-line');
-        due.append(el('b', '', 'Longest since: '), document.createTextNode(sug.neglected.map(a => a.name + ' ' + sinceText(a)).join(' · ')));
-        secEl.append(due);
-      }
-      const rest = el('div', 'rest-line', restParts.length ? 'Resting: ' + restParts.join(' · ') : 'Everything is rested.');
-      if (sug.unmapped.length) rest.append(el('span', 'unmapped', ' · Unmapped: ' + sug.unmapped.join(', ')));
-      const editBtn = el('button', 'rest-edit-btn', restEditOpen ? 'Done' : 'Rest days ✎');
-      editBtn.type = 'button';
-      editBtn.addEventListener('click', () => { restEditOpen = !restEditOpen; restDraft = null; render(); });
-      rest.append(editBtn);
-      secEl.append(rest);
-      if (restEditOpen) secEl.append(restEditor());
-
-      if (!sug.items.length) secEl.append(el('p', 'empty', 'Nothing to suggest — every area is resting or this week\'s PT is done.'));
-      sug.items.forEach(ex => secEl.append(exerciseCard(ex, false)));
-      return secEl;
-    }
-
     function setStatus(text) {
       document.getElementById('status').textContent = text;
     }
@@ -911,6 +967,7 @@
       const card = el('div', 'ex' + ((ex.plan || ex.suggest) && isDoneToday(ex) ? ' done' : '')
         + (ex.category === 'PT' && ex.met ? ' met' : ''));
       card.dataset.key = ex.key;
+      card.dataset.area = ex.area || '';
       card.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
       card.append(el('div', 'ex-name', ex.name),
         el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days)));
@@ -994,7 +1051,10 @@
     function jumpTo(key) {
       if (sortMode !== 'category') setMode('category');
       const card = [...document.querySelectorAll('.section:not(.focus):not(.suggest) .ex')].find(c => c.dataset.key === key);
-      if (!card) return;
+      if (card) flashCard(card);
+    }
+
+    function flashCard(card) {
       card.scrollIntoView({ behavior: 'smooth', block: 'start' });
       card.classList.remove('flash');
       void card.offsetWidth; // restart the animation
