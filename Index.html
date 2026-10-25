@@ -5,20 +5,29 @@
   <base target="_top">
   <style>
     :root {
-      --bg: #f6f6f4;
+      --bg: #f4f3ef;
       --card: #ffffff;
-      --text: #1d1d1b;
-      --muted: #6b6b66;
-      --border: #e3e3df;
+      --text: #2a2a27;
+      --muted: #77766f;
+      --border: #e4e2dc;
+      --soft: #ecebe6;
+      /* Heat tones are kept low-saturation so the list isn't shouty. */
+      --heat-sat: 48%;
+      --heat-light: 56%;
+      --tint: 14%;
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #161615;
-        --card: #222220;
-        --text: #f0f0ec;
-        --muted: #a3a39c;
-        --border: #34342f;
+        --bg: #171716;
+        --card: #212120;
+        --text: #ecebe6;
+        --muted: #9d9c95;
+        --border: #33332f;
+        --soft: #2a2a28;
+        --heat-sat: 40%;
+        --heat-light: 52%;
+        --tint: 16%;
       }
     }
 
@@ -26,201 +35,242 @@
 
     body {
       font-family: system-ui, -apple-system, sans-serif;
-      margin: 0;
-      padding: 16px;
+      margin: 0 auto;
+      padding: 0 12px 32px;
       background: var(--bg);
       color: var(--text);
       max-width: 640px;
-      margin-inline: auto;
+      -webkit-text-size-adjust: 100%;
     }
 
     @media (min-width: 900px) {
-      body { max-width: 1200px; }
+      body { max-width: 1200px; padding: 0 16px 32px; }
+    }
+
+    /* Header + view buttons stay pinned while scrolling on the phone. */
+    .top {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--bg);
+      padding: 10px 0 8px;
+      margin-bottom: 4px;
     }
 
     header {
       display: flex;
-      align-items: baseline;
-      justify-content: space-between;
+      align-items: center;
       gap: 8px;
-      margin-bottom: 8px;
     }
 
-    h1 { font-size: 20px; margin: 0; }
+    h1 { font-size: 18px; margin: 0; flex: 1; }
 
-    #status { color: var(--muted); font-size: 13px; }
+    #status { color: var(--muted); font-size: 12px; text-align: right; }
+
+    header .notes-btn {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+      font-size: 13px;
+    }
 
     .controls {
-      display: flex;
-      gap: 8px;
-      margin: 8px 0 12px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      margin-top: 8px;
+      padding: 3px;
+      background: var(--soft);
+      border-radius: 10px;
     }
 
     .controls button {
-      flex: 1;
-      padding: 8px;
-      border: 1px solid var(--border);
-      background: var(--card);
-      color: var(--text);
+      padding: 8px 2px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
       border-radius: 8px;
-      font-size: 14px;
+      font-size: 13px;
+      white-space: nowrap;
     }
 
-    .controls button.active { border-color: var(--text); font-weight: 600; }
+    .controls button.active {
+      background: var(--card);
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+    }
 
     .legend {
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 12px;
+      font-size: 11px;
       color: var(--muted);
-      margin-bottom: 12px;
+      margin-top: 8px;
     }
 
     .legend .bar {
       flex: 1;
-      height: 8px;
-      border-radius: 4px;
-      background: linear-gradient(to right, hsl(0 75% 50%), hsl(30 85% 50%), hsl(55 85% 48%), hsl(120 55% 42%));
+      height: 6px;
+      border-radius: 3px;
+      background: linear-gradient(to right,
+        hsl(0 var(--heat-sat) var(--heat-light)),
+        hsl(35 var(--heat-sat) var(--heat-light)),
+        hsl(60 var(--heat-sat) var(--heat-light)),
+        hsl(120 var(--heat-sat) var(--heat-light)));
     }
 
     #groups {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 16px;
+      gap: 14px;
       align-items: start;
     }
 
     @media (min-width: 900px) {
       #groups { grid-template-columns: 1fr 1fr; }
-      #groups table.wide { grid-column: 1 / -1; }
+      #groups .section.wide { grid-column: 1 / -1; }
     }
 
-    table.section {
-      width: 100%;
-      border-collapse: collapse;
+    /* ---------- Sections and exercise cards ---------- */
+
+    .section {
       background: var(--card);
-      border: 1px solid var(--text);
-      font-size: 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
     }
 
-    table.section th {
-      text-align: left;
-      padding: 6px 8px;
-      border: 1px solid var(--text);
-      background: var(--bg);
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
     }
 
     .section-name { font-size: 15px; font-weight: 700; }
-    .section-count { float: right; font-size: 12px; font-weight: 400; color: var(--muted); }
+    .section-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
 
-    table.section td {
-      padding: 4px 8px;
-      border: 1px solid var(--border);
-      vertical-align: middle;
+    .sub {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 12px;
+      background: var(--soft);
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
     }
 
-    td.days { width: 1%; text-align: center; padding: 4px 6px; }
+    .ex {
+      --accent: hsl(var(--hue) var(--heat-sat) var(--heat-light));
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 2px 10px;
+      padding: 10px 12px 10px 10px;
+      border-top: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      background: color-mix(in srgb, var(--accent) var(--tint), var(--card));
+    }
 
-    .ex-name { line-height: 1.25; }
-    .ex-meta { font-size: 11px; color: var(--muted); line-height: 1.3; overflow-wrap: anywhere; }
+    .ex.done { opacity: 0.55; }
+
+    .ex-name { font-size: 15px; font-weight: 600; line-height: 1.25; }
+    .ex-meta { font-size: 12px; color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; grid-column: 1 / -1; }
+    .ex-note { font-size: 12px; font-style: italic; color: var(--muted); grid-column: 1 / -1; }
 
     .tag {
       display: inline-block;
-      padding: 0 5px;
-      margin-right: 4px;
+      padding: 0 6px;
+      margin: 2px 4px 0 0;
       border-radius: 4px;
+      background: var(--soft);
+      font-size: 11px;
+      color: var(--text);
+    }
+
+    /* Labelled boxes: Last done, This wk, Prev, Prev 2. */
+    .box {
+      display: inline-block;
+      padding: 1px 6px;
+      margin: 3px 4px 0 0;
       border: 1px solid var(--border);
-      font-size: 10px;
+      border-radius: 4px;
+      background: var(--card);
+      font-size: 11px;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .box b { font-weight: 600; color: var(--muted); }
+    .dots { letter-spacing: 1px; color: var(--accent); }
+
+    .pill {
+      align-self: start;
+      min-width: 58px;
+      text-align: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent) 30%, var(--card));
+      border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--card));
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
     }
 
     .log {
+      grid-column: 1 / -1;
       display: flex;
       gap: 6px;
-      margin: 4px 0 2px;
+      margin-top: 8px;
     }
 
     .log input {
       flex: 1;
       min-width: 0;
-      padding: 5px 8px;
+      height: 40px;
+      padding: 0 10px;
       font-size: 16px; /* 16px stops iPhone zooming in on focus */
       border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg);
+      border-radius: 8px;
+      background: var(--card);
       color: var(--text);
     }
 
-    tr.sub td {
-      background: var(--bg);
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      padding: 3px 8px;
-      border-top: 2px solid var(--text);
-    }
-
-    .empty { color: var(--muted); text-align: center; padding: 24px 0; grid-column: 1 / -1; }
-
-    .log input.weight { flex: 0 0 5.5em; }
+    .log input.weight { flex: 0 0 6.5em; }
 
     .log button {
-      padding: 5px 12px;
+      height: 40px;
+      padding: 0 16px;
       font-size: 14px;
-      border: 1px solid var(--text);
-      border-radius: 6px;
+      font-weight: 600;
+      border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--text));
+      border-radius: 8px;
       background: var(--card);
       color: var(--text);
     }
 
     .log button:disabled { opacity: 0.5; }
 
-    /* Whole exercise box takes its heat color; mixed with the card color
-       just enough to keep the text readable in light and dark mode. */
-    tr.ex-row td {
-      background: color-mix(in srgb, var(--heat) 55%, var(--card));
-      border-color: color-mix(in srgb, var(--heat) 70%, var(--text));
-    }
-    tr.ex-row .ex-meta { color: var(--text); opacity: 0.75; }
-    tr.ex-row .tag { border-color: currentColor; }
-
     /* Focus table: today's plan pinned above every list. */
-    table.section.focus { border: 2px solid var(--text); }
-    table.section.focus th { background: var(--text); color: var(--bg); }
-    table.section.focus th .section-count { color: var(--bg); opacity: 0.8; }
-    tr.ex-row.done td { opacity: 0.55; }
-    .ex-note { font-size: 12px; font-style: italic; margin-top: 2px; }
+    .section.focus { border: 1.5px solid var(--muted); }
+    .section.focus .section-head { background: var(--soft); }
 
-    /* Labelled boxes under each exercise: Last done, Prev, Prev 2. */
-    .box {
-      display: inline-block;
-      padding: 1px 6px;
-      margin: 2px 4px 0 0;
-      border: 1px solid currentColor;
-      border-radius: 4px;
-      font-size: 11px;
-      white-space: nowrap;
-    }
-    .box b { font-weight: 600; }
-    .box-line { margin-top: 2px; }
+    .empty { color: var(--muted); text-align: center; padding: 24px 0; grid-column: 1 / -1; }
 
-    header .notes-btn {
-      padding: 4px 10px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--card);
-      color: var(--text);
-      font-size: 13px;
-    }
-
-    /* Notes side panel slides in from the right. */
+    /* ---------- Notes side panel ---------- */
     #notes-shade {
-      position: fixed; inset: 0; background: rgb(0 0 0 / 0.3);
+      position: fixed; inset: 0; z-index: 10; background: rgb(0 0 0 / 0.3);
       opacity: 0; pointer-events: none; transition: opacity 0.2s;
     }
     #notes-panel {
-      position: fixed; top: 0; right: 0; bottom: 0;
+      position: fixed; top: 0; right: 0; bottom: 0; z-index: 11;
       width: min(360px, 88vw);
       background: var(--card); color: var(--text);
       border-left: 1px solid var(--border);
@@ -240,7 +290,7 @@
     }
     #notes-panel button {
       padding: 6px 12px; font-size: 14px;
-      border: 1px solid var(--text); border-radius: 6px;
+      border: 1px solid var(--border); border-radius: 6px;
       background: var(--card); color: var(--text);
     }
     #notes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -249,39 +299,28 @@
       padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px;
     }
     #notes-list li span { flex: 1; overflow-wrap: anywhere; }
-    #notes-list li button { padding: 0 8px; border-color: var(--border); }
+    #notes-list li button { padding: 0 8px; }
     #notes-status { font-size: 12px; color: var(--muted); }
-
-    .pill {
-      display: inline-block;
-      min-width: 56px;
-      text-align: center;
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: var(--heat);
-      color: #fff;
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
-    }
   </style>
 </head>
 
 <body>
-  <header>
-    <h1>Exercise Tracker</h1>
-    <div id="status">Loading…</div>
-    <button class="notes-btn" id="notes-open" type="button">Notes</button>
-  </header>
+  <div class="top">
+    <header>
+      <h1>Exercise Tracker</h1>
+      <div id="status">Loading…</div>
+      <button class="notes-btn" id="notes-open" type="button">Notes</button>
+    </header>
 
-  <div class="controls">
-    <button data-sort="category" class="active">Category</button>
-    <button data-sort="days">Days since</button>
-    <button data-sort="today">Today's exercises</button>
-    <button data-sort="plan">Today's plan</button>
+    <div class="controls">
+      <button data-sort="category" class="active">Category</button>
+      <button data-sort="days">Days</button>
+      <button data-sort="today">Done today</button>
+      <button data-sort="plan">Plan</button>
+    </div>
+
+    <div class="legend"><span>Just trained</span><div class="bar"></div><span>Recovered</span></div>
   </div>
-
-  <div class="legend"><span>Just trained</span><div class="bar"></div><span>Recovered</span></div>
 
   <div id="groups"></div>
 
@@ -310,12 +349,10 @@
       return (n == null || isNaN(n)) ? NO_DATE_DAYS : n;
     }
 
-    // 0 = just trained (red) → 1+ = recovered (green).
-    function heatColor(days, recoveryDays) {
+    // Hue for the heat color: 0 = just trained (red) → 120 = recovered (green).
+    function heatHue(days, recoveryDays) {
       const t = Math.max(0, Math.min(1, days / recoveryDays));
-      const hue = t * 120;
-      const light = 50 - t * 8;
-      return `hsl(${hue.toFixed(0)} 75% ${light.toFixed(0)}%)`;
+      return Math.round(t * 120);
     }
 
     function daysLabel(n) {
@@ -323,7 +360,6 @@
       if (n === 1) return '1 day';
       return n + ' days';
     }
-
 
     // Week runs Monday–Sunday.
     function weekStartIso() {
@@ -333,8 +369,16 @@
       return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
     }
 
-    function doneThisWeek(ex) {
-      return !ex.noDate && ex.lastDate >= weekStartIso();
+    // Per sheet row ("slot").
+    const slotThisWeek = s => !s.noDate && s.lastDate >= weekStartIso();
+    const slotToday = s => !s.noDate && s.lastDate === data.today;
+
+    // Per merged exercise.
+    const isDoneToday = ex => ex.slots.some(slotToday);
+    function weekCount(list) {
+      const done = list.reduce((n, ex) => n + ex.weekDone, 0);
+      const total = list.reduce((n, ex) => n + ex.slots.length, 0);
+      return done + ' / ' + total;
     }
 
     // Weight = the leading part of a log entry when it has letters,
@@ -348,12 +392,25 @@
       return String(name).replace(/[.\s]+$/, '').replace(/\.?\s+\d.*$/, '').trim().toLowerCase();
     }
 
-    // Last weight used: newest entry in this row, else any row of the same exercise.
+    // "Side Lying Hip Abduction    2-3x a wk" → name "Side Lying Hip Abduction", freq "2–3×/wk".
+    const FREQ_RE = /\s*(\d)\s*(?:-\s*(\d))?\s*x\s*(?:a|\/)\s*wk\.?\s*$/i;
+    function splitName(name) {
+      const raw = String(name).trim();
+      const m = raw.match(FREQ_RE);
+      const clean = (m ? raw.slice(0, m.index) : raw).replace(/[.\s]+$/, '').replace(/\s{2,}/g, ' ');
+      const freq = m ? (m[2] ? m[1] + '–' + m[2] : m[1]) + '×/wk' : '';
+      return { name: clean || raw, freq };
+    }
+
+    // Last weight used: newest entry across this exercise's rows, else any
+    // row with the same exercise name.
     function lastWeight(ex) {
       const fromRow = list => (list || []).map(weightOf).find(Boolean) || '';
-      const own = fromRow(ex.sets);
-      if (own) return own;
-      const key = baseName(ex.name);
+      for (const s of ex.recent) {
+        const w = fromRow(s.sets);
+        if (w) return w;
+      }
+      const key = baseName(ex.target.name);
       for (const g of data.groups) for (const other of g.exercises) {
         if (baseName(other.name) === key) {
           const w = fromRow(other.sets);
@@ -370,7 +427,6 @@
       return node;
     }
 
-    // Flatten groups into sections (PT, Compound, Iso…) in sheet order.
     // Three top categories; the sheet's Abs section lives under Isolation.
     function categoryOf(section) {
       const s = String(section || '');
@@ -380,28 +436,65 @@
       return s.split(' (')[0] || 'Other';
     }
 
-    function buildSections() {
+    // Every sheet row as a flat list, sheet order.
+    function sheetRows() {
       const all = [];
       data.groups.forEach(g => g.exercises.forEach(ex =>
-        all.push(Object.assign({ group: g.name, recoveryDays: g.recoveryDays }, ex,
-          { days: effectiveDays(ex.daysSince), noDate: ex.daysSince == null }))));
-      all.sort((a, b) => a.row - b.row);
+        all.push(Object.assign({ group: g.name, recoveryDays: g.recoveryDays }, ex, {
+          days: effectiveDays(ex.daysSince),
+          noDate: ex.daysSince == null,
+          category: categoryOf(ex.section),
+        }))));
+      return all.sort((a, b) => a.row - b.row);
+    }
 
+    // Duplicate rows (PT exercises have one row per weekly session) become one
+    // exercise. Each row is a "slot"; logging fills the next open slot.
+    function mergeDupes(rows) {
+      const list = [];
+      const byKey = {};
+      rows.forEach(r => {
+        const key = r.category + '|' + r.group + '|' + baseName(r.name);
+        if (!byKey[key]) list.push(byKey[key] = { key, slots: [] });
+        byKey[key].slots.push(r);
+      });
+      return list.map(({ key, slots }) => {
+        const recent = slots.slice().sort((a, b) => a.days - b.days || a.row - b.row);
+        const latest = recent[0];
+        // Already logged today → same row again; otherwise first row not done
+        // this week; all done → the oldest one.
+        const target = slots.find(slotToday) || slots.find(s => !slotThisWeek(s)) || recent[recent.length - 1];
+        const parts = slots.map(s => splitName(s.name));
+        const shortest = parts.reduce((a, b) => (b.name.length < a.name.length ? b : a));
+        return {
+          key, slots, recent, latest, target,
+          name: shortest.name,
+          freq: parts.map(p => p.freq).find(Boolean) || '',
+          group: latest.group,
+          category: latest.category,
+          recoveryDays: latest.recoveryDays,
+          days: latest.days,
+          noDate: latest.noDate,
+          lastDate: latest.lastDate,
+          dateText: latest.dateText,
+          firstRow: slots[0].row,
+          weekDone: slots.filter(slotThisWeek).length,
+        };
+      });
+    }
+
+    // Merged exercises grouped into PT / Compound / Isolation, sheet order.
+    function buildSections() {
       const sections = [];
       const byName = {};
-      all.forEach(ex => {
-        ex.category = categoryOf(ex.section);
-        const name = ex.category;
-        if (!byName[name]) {
-          byName[name] = { name, exercises: [] };
-          sections.push(byName[name]);
-        }
-        byName[name].exercises.push(ex);
+      mergeDupes(sheetRows()).forEach(ex => {
+        if (!byName[ex.category]) sections.push(byName[ex.category] = { name: ex.category, exercises: [] });
+        byName[ex.category].exercises.push(ex);
       });
       return sections;
     }
 
-    // One box per exercise: type sets like "15,15,15", tap Log.
+    // Weight + sets, tap Log. Writes to the target row (next open slot).
     function logBox(ex) {
       const form = el('form', 'log');
       const weight = el('input', 'weight');
@@ -410,6 +503,7 @@
       const input = el('input');
       input.placeholder = 'Sets, e.g. 15,15,15';
       input.enterKeyHint = 'done';
+      input.inputMode = 'text';
       const btn = el('button', '', 'Log');
       btn.type = 'submit';
       form.append(weight, input, btn);
@@ -434,52 +528,60 @@
             btn.textContent = 'Log';
             setStatus('Error: ' + err.message);
           })
-          .logExercise(ex.row, ex.name, entry);
+          .logExercise(ex.target.row, ex.target.name, entry);
       });
       return form;
     }
 
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    function box(label, value) {
+    function box(label, value, valueCls) {
       const b = el('span', 'box');
-      b.append(el('b', '', label + ': '), document.createTextNode(value));
+      b.append(el('b', '', label + ' '));
+      b.append(valueCls ? el('span', valueCls, value) : document.createTextNode(value));
       return b;
     }
 
-    // "9/22 Tues | wk4/5" → Last done: 9/22 Tues · Sep wk 4/5, then the
-    // last two logs as Prev / Prev 2 (column D is newest).
+    const cleanEntry = s => String(s || '').replace(/\s+/g, ' ').replace(/[,.\s]+$/, '');
+
+    // Last done (newest row) · Sep wk 4 of 5 · This wk ●●○ · Prev · Prev 2.
     function historyLine(ex) {
-      const line = el('div', 'ex-meta box-line');
+      const line = el('div', 'ex-meta');
       const text = String(ex.dateText || '');
       const [datePart, ...rest] = text.split('|').map(t => t.trim());
       if (!ex.noDate) {
-        line.append(box('Last done', datePart));
+        line.append(box('Last', datePart));
         const extra = rest.join(' | ');
         const wk = extra.match(/^wk\s*(\d)\s*\/\s*(\d)$/i);
         if (wk) line.append(box(MONTHS[Number(ex.lastDate.slice(5, 7)) - 1] + ' wk', wk[1] + ' of ' + wk[2]));
         else if (extra && extra !== 'i') line.append(document.createTextNode(extra + ' '));
-      } else if (text.trim() && text.trim() !== 'i') {
-        line.append(document.createTextNode(text.trim() + ' '));
       }
-      const sets = (ex.sets || []).map(s => s.replace(/\s+/g, ' ').replace(/[,.\s]+$/, '')).filter(Boolean);
-      if (sets[0]) line.append(box('Prev', sets[0]));
-      if (sets[1]) line.append(box('Prev 2', sets[1]));
+      if (ex.slots.length > 1) {
+        const n = ex.slots.length;
+        line.append(box('This wk', '●'.repeat(ex.weekDone) + '○'.repeat(n - ex.weekDone), 'dots'));
+      }
+      // One row: its last two logs. Several rows: the newest log of each, newest row first.
+      const entries = ex.slots.length > 1
+        ? ex.recent.map(s => cleanEntry((s.sets || [])[0])).filter(Boolean)
+        : (ex.latest.sets || []).map(cleanEntry).filter(Boolean);
+      if (entries[0]) line.append(box('Prev', entries[0]));
+      if (entries[1]) line.append(box('Prev 2', entries[1]));
       return line.childNodes.length ? line : null;
-    }
-
-    function isDoneToday(ex) {
-      return !ex.noDate && ex.lastDate === data.today;
     }
 
     // Plan from plan.js, matched by row (falls back to name if rows moved).
     // Keeps plan order, but anything already logged today moves to the end.
     function plannedExercises(sections) {
       const all = [].concat(...sections.map(s => s.exercises));
-      const planned = (data.plan || []).map(p => {
-        const ex = all.find(e => e.row === p.row && e.name === p.name) || all.find(e => e.name === p.name);
-        return ex ? Object.assign({}, ex, { plan: p }) : null;
-      }).filter(Boolean);
+      const seen = new Set();
+      const planned = [];
+      (data.plan || []).forEach(p => {
+        const ex = all.find(e => e.slots.some(s => s.row === p.row && s.name === p.name))
+          || all.find(e => e.slots.some(s => s.name === p.name));
+        if (!ex || seen.has(ex.key)) return;
+        seen.add(ex.key);
+        planned.push(Object.assign({}, ex, { plan: p }));
+      });
       return planned.filter(ex => !isDoneToday(ex)).concat(planned.filter(isDoneToday));
     }
 
@@ -487,24 +589,44 @@
       document.getElementById('status').textContent = text;
     }
 
+    function exerciseCard(ex, showTags) {
+      const card = el('div', 'ex' + (ex.plan && isDoneToday(ex) ? ' done' : ''));
+      card.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
+      card.append(el('div', 'ex-name', ex.name),
+        el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days)));
+
+      const meta = el('div', 'ex-meta');
+      if (showTags) meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
+      if (ex.freq) meta.append(el('span', 'tag', ex.freq));
+      if (ex.plan) {
+        const target = [ex.plan.target, ex.plan.weight].filter(Boolean).join(' @ ');
+        meta.append(el('span', 'tag', isDoneToday(ex) ? '✓ done' : 'Plan' + (target ? ': ' + target : '')));
+      }
+      if (meta.childNodes.length) card.append(meta);
+      const history = historyLine(ex);
+      if (history) card.append(history);
+      if (ex.plan && ex.plan.note) card.append(el('div', 'ex-note', ex.plan.note));
+      card.append(logBox(ex));
+      return card;
+    }
+
     function render() {
       const wrap = document.getElementById('groups');
       wrap.innerHTML = '';
 
       let sections = buildSections();
+      const all = [].concat(...sections.map(s => s.exercises));
       if (sortMode === 'days') {
         // One list, most days since first; exercises with no date at the bottom.
-        const all = [].concat(...sections.map(s => s.exercises));
-        all.sort((a, b) => b.days - a.days || a.noDate - b.noDate || a.row - b.row);
-        sections = [{ name: 'All — longest since first', exercises: all, wide: true }];
+        all.sort((a, b) => b.days - a.days || a.noDate - b.noDate || a.firstRow - b.firstRow);
+        sections = [{ name: 'Longest since first', exercises: all, wide: true }];
       } else if (sortMode === 'today') {
-        // Everything logged today, in sheet order.
-        const done = [].concat(...sections.map(s => s.exercises)).filter(ex => !ex.noDate && ex.lastDate === data.today);
+        const done = all.filter(isDoneToday);
         if (!done.length) {
           wrap.append(el('p', 'empty', 'Nothing logged yet today.'));
           return;
         }
-        sections = [{ name: "Today's exercises", exercises: done, wide: true }];
+        sections = [{ name: 'Done today', exercises: done, wide: true }];
       } else if (sortMode === 'plan') {
         const planned = plannedExercises(sections);
         if (!planned.length) {
@@ -514,8 +636,7 @@
         sections = [{ name: "Today's plan", exercises: planned, wide: true, focus: true }];
       }
 
-      // Focus: today's plan bubbles to the top of the Category and Days views,
-      // still-to-do first, done ones sink to the bottom of the table.
+      // Focus: today's plan bubbles to the top of the Category and Days views.
       if (sortMode === 'category' || sortMode === 'days') {
         const planned = plannedExercises(sections);
         if (planned.length) sections.unshift({ name: 'Focus — today', exercises: planned, wide: true, focus: true });
@@ -527,60 +648,28 @@
           ? exercises.length + ' done'
           : sec.focus
           ? exercises.filter(isDoneToday).length + ' / ' + exercises.length + ' done'
-          : exercises.filter(doneThisWeek).length + ' / ' + exercises.length + ' done this week';
-        const table = el('table', 'section' + (sec.wide ? ' wide' : '') + (sec.focus ? ' focus' : ''));
-        const head = table.createTHead().insertRow();
-        const th = el('th');
-        th.colSpan = 2;
-        th.append(el('span', 'section-name', sec.name),
-          el('span', 'section-count', countText));
-        head.append(th);
+          : weekCount(exercises) + ' this week';
+        const secEl = el('section', 'section' + (sec.wide ? ' wide' : '') + (sec.focus ? ' focus' : ''));
+        const head = el('div', 'section-head');
+        head.append(el('span', 'section-name', sec.name), el('span', 'section-count', countText));
+        secEl.append(head);
 
-        const body = table.createTBody();
-        // Category view: subheadings per muscle group (column A), groups in sheet order.
-        let list = exercises;
-        if (sortMode === 'category' && !sec.focus) {
+        const byGroup = sortMode === 'category' && !sec.focus;
+        if (byGroup) {
+          // Subheadings per muscle group (column A), groups in sheet order.
           const order = [];
           exercises.forEach(ex => { if (!order.includes(ex.group)) order.push(ex.group); });
-          list = order.flatMap(g => exercises.filter(ex => ex.group === g));
+          order.forEach(g => {
+            const list = exercises.filter(ex => ex.group === g);
+            const sub = el('div', 'sub');
+            sub.append(el('span', '', g), el('span', '', weekCount(list)));
+            secEl.append(sub);
+            list.forEach(ex => secEl.append(exerciseCard(ex, false)));
+          });
+        } else {
+          exercises.forEach(ex => secEl.append(exerciseCard(ex, true)));
         }
-        let lastGroup = null;
-        list.forEach(ex => {
-          if (sortMode === 'category' && !sec.focus && ex.group !== lastGroup) {
-            lastGroup = ex.group;
-            const groupRows = list.filter(e => e.group === ex.group);
-            const sub = body.insertRow();
-            sub.className = 'sub';
-            const c = sub.insertCell();
-            c.colSpan = 2;
-            c.append(el('span', '', ex.group),
-              el('span', 'section-count', groupRows.filter(doneThisWeek).length + ' / ' + groupRows.length));
-          }
-          const row = body.insertRow();
-          const main = row.insertCell();
-          main.append(el('div', 'ex-name', ex.name));
-          const meta = el('div', 'ex-meta');
-          if (sortMode !== 'category' || sec.focus) meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
-          if (ex.plan) {
-            const doneToday = isDoneToday(ex);
-            const target = [ex.plan.target, ex.plan.weight].filter(Boolean).join(' @ ');
-            meta.append(el('span', 'tag', doneToday ? '✓ done' : 'Plan' + (target ? ': ' + target : '')));
-          }
-          main.append(meta);
-          const history = historyLine(ex);
-          if (history) main.append(history);
-          if (ex.plan && ex.plan.note) main.append(el('div', 'ex-note', ex.plan.note));
-          main.append(logBox(ex));
-
-          const cell = row.insertCell();
-          cell.className = 'days';
-          const pill = el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days));
-          row.className = 'ex-row' + (ex.plan && isDoneToday(ex) ? ' done' : '');
-          row.style.setProperty('--heat', heatColor(ex.days, ex.recoveryDays));
-          cell.append(pill);
-        });
-
-        wrap.append(table);
+        wrap.append(secEl);
       });
     }
 
@@ -589,6 +678,7 @@
         sortMode = btn.dataset.sort;
         document.querySelectorAll('.controls button').forEach(b => b.classList.toggle('active', b === btn));
         if (data) render();
+        window.scrollTo(0, 0);
       });
     });
 
@@ -643,13 +733,10 @@
     google.script.run
       .withSuccessHandler(result => {
         data = result;
-        const count = result.groups.reduce((n, g) => n + g.exercises.length, 0);
-        document.getElementById('status').textContent = `${count} exercises`;
+        setStatus(mergeDupes(sheetRows()).length + ' exercises');
         render();
       })
-      .withFailureHandler(err => {
-        document.getElementById('status').textContent = 'Error: ' + err.message;
-      })
+      .withFailureHandler(err => setStatus('Error: ' + err.message))
       .getTrackerData();
   </script>
 </body>
