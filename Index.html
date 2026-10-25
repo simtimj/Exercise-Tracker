@@ -78,7 +78,7 @@
 
     .controls {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 4px;
       margin-top: 8px;
       padding: 3px;
@@ -179,7 +179,7 @@
       background: var(--card);
     }
 
-    .ex.done { opacity: 0.55; }
+    .ex.done { opacity: 0.75; }
 
     .ex-name { font-size: 15px; font-weight: 600; line-height: 1.25; }
     .ex-meta { font-size: 12px; color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; grid-column: 1 / -1; }
@@ -479,8 +479,6 @@
     <div class="controls">
       <button data-sort="category" class="active">Category</button>
       <button data-sort="days">Days</button>
-      <button data-sort="today">Done today</button>
-      <button data-sort="plan">Plan</button>
     </div>
 
     <div id="pt-strip"></div>
@@ -816,6 +814,11 @@
         if (!ex || seen.has(ex.key)) return;
         seen.add(ex.key);
         planned.push(Object.assign({}, ex, { plan: p }));
+      });
+      // Anything logged today stays in Today as a record, planned or not.
+      all.filter(ex => isDoneToday(ex) && !seen.has(ex.key)).forEach(ex => {
+        seen.add(ex.key);
+        planned.push(Object.assign({}, ex, { plan: { row: ex.target.row, name: ex.target.name, logged: true } }));
       });
       return planned.filter(ex => !isDoneToday(ex)).concat(planned.filter(isDoneToday));
     }
@@ -1191,7 +1194,7 @@
       if (ex.plan) {
         const target = [ex.plan.target, ex.plan.weight].filter(Boolean).join(' @ ');
         meta.append(el('span', 'tag', isDoneToday(ex) ? '✓ done' : (ex.plan.picked ? 'Picked' : 'Plan') + (target ? ': ' + target : '')));
-        if (ex.plan.picked) {
+        if (ex.plan.picked && !isDoneToday(ex)) {
           const later = el('button', 'mini', 'Later');
           const del = el('button', 'mini', '✕');
           later.type = del.type = 'button';
@@ -1299,20 +1302,6 @@
         // One list, most days since first; exercises with no date at the bottom.
         all.sort((a, b) => b.days - a.days || a.noDate - b.noDate || a.firstRow - b.firstRow);
         sections = [{ name: 'Longest since first', exercises: all, wide: true }];
-      } else if (sortMode === 'today') {
-        const done = all.filter(isDoneToday);
-        if (!done.length) {
-          wrap.append(el('p', 'empty', 'Nothing logged yet today.'));
-          return;
-        }
-        sections = [{ name: 'Done today', exercises: done, wide: true }];
-      } else if (sortMode === 'plan') {
-        const planned = plannedExercises(sections);
-        if (!planned.length) {
-          wrap.append(el('p', 'empty', 'No plan for today yet. Ask Claude for one.'));
-          return;
-        }
-        sections = [{ name: "Today's plan", exercises: planned, wide: true, focus: true }];
       }
 
       // Pinned on Category and Days, as clearly separate zones: Today (plan +
@@ -1335,9 +1324,7 @@
     function sectionEl(sec) {
       {
         const exercises = sec.exercises;
-        const countText = sortMode === 'today'
-          ? exercises.length + ' done'
-          : sec.focus
+        const countText = sec.focus
           ? exercises.filter(isDoneToday).length + ' / ' + exercises.length + ' done'
           : weekCount(exercises) + ' this week';
         const secEl = el('section', 'section' + (sec.wide ? ' wide' : '') + (sec.focus ? ' focus' : ''));
@@ -1357,6 +1344,23 @@
             secEl.append(sub);
             list.forEach(ex => secEl.append(exerciseCard(ex, false)));
           });
+        } else if (sec.focus) {
+          // Today: what's left, then what's done — done items stay as a record.
+          const todo = exercises.filter(ex => !isDoneToday(ex));
+          const done = exercises.filter(isDoneToday);
+          if (done.length) {
+            const s1 = el('div', 'sub');
+            s1.append(el('span', '', 'To do'), el('span', '', String(todo.length)));
+            secEl.append(s1);
+            if (!todo.length) secEl.append(el('p', 'empty small', 'All done — nice.'));
+          }
+          todo.forEach(ex => secEl.append(exerciseCard(ex, true)));
+          if (done.length) {
+            const s2 = el('div', 'sub');
+            s2.append(el('span', '', 'Done today ✓'), el('span', '', String(done.length)));
+            secEl.append(s2);
+            done.forEach(ex => secEl.append(exerciseCard(ex, true)));
+          }
         } else {
           exercises.forEach(ex => secEl.append(exerciseCard(ex, true)));
         }
