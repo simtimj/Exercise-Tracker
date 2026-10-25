@@ -316,13 +316,23 @@
     }
     .pt-line .pt-label { white-space: nowrap; min-width: 6.8em; }
     .pt-line .pt-count { white-space: nowrap; color: var(--muted); font-weight: 500; }
-    .pt-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
-    .pt-bar span { display: block; height: 100%; background: hsl(120 var(--heat-sat) var(--heat-light)); }
-    .pt-bar.all span { background: hsl(140 55% 42%); }
+    /* Segmented bars: one box per exercise. */
+    .seg-bar { flex: 1; display: flex; gap: 2px; min-width: 0; }
+    .seg {
+      --fill: hsl(120 var(--heat-sat) var(--heat-light));
+      flex: 1; min-width: 2px; height: 9px;
+      border-radius: 2px;
+      background: var(--soft);
+      box-shadow: inset 0 0 0 1px var(--border);
+      overflow: hidden;
+    }
+    .seg.full { background: var(--fill); box-shadow: none; }
+    .seg i { display: block; height: 100%; background: hsl(40 65% 60%); }
+    .seg-bar.all .seg { --fill: hsl(140 55% 42%); }
+    .seg-bar.blue .seg { --fill: hsl(210 var(--heat-sat) var(--heat-light)); height: 7px; }
+    .wk-days { font-weight: 600; }
     /* Bonus line: same shape, quieter — optional, not a to-do. */
     .pt-line.bonus { margin-top: 6px; font-weight: 500; color: var(--muted); }
-    .pt-line.bonus .pt-bar { height: 4px; }
-    .pt-line.bonus .pt-bar span { background: hsl(210 var(--heat-sat) var(--heat-light)); }
     .pt-chips {
       display: flex; gap: 6px; margin-top: 6px;
       overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
@@ -591,6 +601,28 @@
 
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+    // "2026-10-26" → "M". Su M T W Th F Sa.
+    const DAY_ABBR = ['Su', 'M', 'T', 'W', 'Th', 'F', 'Sa'];
+    function dayAbbr(iso) {
+      const [y, m, d] = iso.split('-').map(Number);
+      return DAY_ABBR[new Date(y, m - 1, d).getDay()];
+    }
+
+    // Segmented bar: one box per item. cells = fill amounts 0..1, filled first.
+    function segBar(cells, cls) {
+      const bar = el('div', 'seg-bar' + (cls ? ' ' + cls : ''));
+      cells.slice().sort((a, b) => b - a).forEach(v => {
+        const seg = el('span', 'seg' + (v >= 1 ? ' full' : v > 0 ? ' part' : ''));
+        if (v > 0 && v < 1) {
+          const i = el('i');
+          i.style.width = Math.round(v * 100) + '%';
+          seg.append(i);
+        }
+        bar.append(seg);
+      });
+      return bar;
+    }
+
     const cleanEntry = s => String(s || '').replace(/\s+/g, ' ').replace(/[,.\s]+$/, '');
 
     // Facts block, one labelled row each:
@@ -620,9 +652,13 @@
       }
 
       if (ex.slots.length > 1 || ex.category === 'PT') {
-        const n = ex.slots.length;
-        row('This wk', el('span', 'dots', '●'.repeat(ex.weekDone) + '○'.repeat(Math.max(0, n - ex.weekDone))),
-          el('span', 'dots-n', ex.weekDone + ' of ' + ex.weekTarget + (ex.met ? ' ✓' : '')));
+        // One dot per session in the weekly goal (more if he went over).
+        const n = Math.max(ex.weekTarget, ex.weekDone);
+        const days = ex.slots.filter(slotThisWeek).map(s => s.lastDate).sort().map(dayAbbr);
+        const parts = [el('span', 'dots', '●'.repeat(ex.weekDone) + '○'.repeat(n - ex.weekDone)),
+          el('span', 'dots-n', ex.weekDone + ' of ' + ex.weekTarget + (ex.met ? ' ✓' : ''))];
+        if (days.length) parts.push(el('span', 'sep', '·'), el('span', 'wk-days', days.join(' ')));
+        row('This wk', ...parts);
       }
 
       // One row: its last two logs. Several rows: the newest log of each, newest row first.
@@ -685,14 +721,11 @@
       const pt = (sections.find(s => s.name === 'PT') || { exercises: [] }).exercises;
       if (!pt.length) return;
       const met = pt.filter(ex => ex.met).length;
-      const done = pt.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0);
-      const goal = pt.reduce((n, ex) => n + ex.weekTarget, 0);
 
+      // One box per PT exercise: full = weekly goal met, partly filled =
+      // started but not there yet. Count = full boxes.
       const line = el('div', 'pt-line');
-      const bar = el('div', 'pt-bar' + (met === pt.length ? ' all' : ''));
-      const fill = el('span');
-      fill.style.width = Math.round(100 * done / goal) + '%';
-      bar.append(fill);
+      const bar = segBar(pt.map(ex => Math.min(1, ex.weekDone / ex.weekTarget)), met === pt.length ? 'all' : '');
       line.append(el('span', 'pt-label', 'PT this week'), bar,
         el('span', 'pt-count', met === pt.length ? 'all done ✓' : met + ' / ' + pt.length + ' done'));
       strip.append(line);
@@ -717,10 +750,7 @@
       if (extra.length) {
         const hit = extra.filter(ex => ex.weekDone > 0).length;
         const bLine = el('div', 'pt-line bonus');
-        const bBar = el('div', 'pt-bar');
-        const bFill = el('span');
-        bFill.style.width = Math.round(100 * hit / extra.length) + '%';
-        bBar.append(bFill);
+        const bBar = segBar(extra.map(ex => (ex.weekDone > 0 ? 1 : 0)), 'blue');
         bLine.append(el('span', 'pt-label', 'Bonus'), bBar,
           el('span', 'pt-count', hit ? '+' + hit + ' of ' + extra.length : '0 of ' + extra.length));
         strip.append(bLine);
