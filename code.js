@@ -1,30 +1,27 @@
 const SHEET_ID = '1oBtPYDCDiiXms0cqbfiymrAQ-qqLeI5OI7Ojee8Z_IY';
 const TAB_NAME = 'V5: PT, Compound, Iso';
 
-// Days until a muscle group counts as fully recovered (green).
-// Placeholder values — tune these. Keys are matched case-insensitively
-// against column A ("Variety"); anything not listed uses DEFAULT.
-const RECOVERY_DAYS = {
-  DEFAULT: 3,
-  glute: 3,
-  lower: 3,
-  legs: 3,
-  quads: 3,
-  hamstrings: 3,
-  'low back': 3,
-  'upp back': 2,
-  'up back': 2,
-  back: 2,
-  chest: 2,
-  shoulders: 2,
-  arms: 2,
-  biceps: 2,
-  triceps: 2,
-  core: 1,
-  abs: 1,
-  calves: 1,
-  pt: 1,
+// Body areas: the single config for recovery. Column A labels ("Variety",
+// lowercased + trimmed) map to an area; an area is "ready" once the days since
+// anything in it was last trained reach `days`. Heat colors use the same days,
+// so colors and suggestions agree. Unmapped labels → OTHER (shown as "Other").
+const AREAS = {
+  'Glutes/Hips': { days: 2, labels: ['glute', 'glutes', 'hips', 'glutes/hips', 'hip rotation'] },
+  Legs: { days: 3, labels: ['lower', 'low', 'legs', 'quads', 'hamstrings', 'calves'] },
+  Core: { days: 1, labels: ['core stab', 'core', 'abs'] },
+  Back: { days: 2, labels: ['upp back', 'up back', 'upback', 'up bk', 'back', 'low back', 'delt'] },
+  Push: { days: 2, labels: ['chest', 'chest, sh', 'shoulders', 'sh'] },
+  Arms: { days: 2, labels: ['biceps', 'tricep', 'triceps'] },
 };
+const OTHER_AREA = { name: 'Other', days: 2 };
+
+function areaFor(group) {
+  const key = String(group || '').trim().toLowerCase();
+  for (const name in AREAS) {
+    if (AREAS[name].labels.includes(key)) return { name: name, days: AREAS[name].days };
+  }
+  return { name: OTHER_AREA.name, days: OTHER_AREA.days };
+}
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
@@ -57,8 +54,7 @@ function planFor(plan, today) {
 }
 
 function recoveryDaysFor(group) {
-  const key = String(group || '').trim().toLowerCase();
-  return RECOVERY_DAYS[key] || RECOVERY_DAYS.DEFAULT;
+  return areaFor(group).days;
 }
 
 // Pulls "M/D" out of free text like "9/22 Tues | …". No year in the sheet,
@@ -117,7 +113,8 @@ function parseRows(rows, today) {
     if (!byName[groupName]) {
       byName[groupName] = {
         name: groupName,
-        recoveryDays: recoveryDaysFor(groupName),
+        area: areaFor(groupName).name,
+        recoveryDays: areaFor(groupName).days,
         exercises: [],
         lastDate: null,
         daysSince: null,
@@ -144,7 +141,9 @@ function parseRows(rows, today) {
     }
   });
 
-  return { today: isoDate(today), groups: groups };
+  const areas = Object.keys(AREAS).map(name => ({ name: name, days: AREAS[name].days }));
+  areas.push({ name: OTHER_AREA.name, days: OTHER_AREA.days });
+  return { today: isoDate(today), groups: groups, areas: areas };
 }
 
 // ---------- Logging (writes to the sheet) ----------
@@ -293,5 +292,5 @@ function removeNote(i, text) {
 
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, replaceDateText, buildSetCells, planFor, notesFrom };
+  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, areaFor, replaceDateText, buildSetCells, planFor, notesFrom };
 }

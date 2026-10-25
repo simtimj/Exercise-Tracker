@@ -267,6 +267,19 @@
     .section.focus { border: 1.5px solid var(--muted); }
     .section.focus .section-head { background: var(--soft); }
 
+    /* Suggested — today: picked from rested body areas. */
+    .section.suggest { border: 1.5px dashed var(--muted); }
+    .section.suggest .section-head { background: var(--soft); cursor: pointer; }
+    .section.suggest.collapsed .ex, .section.suggest.collapsed .rest-line { display: none; }
+    .section.suggest .chev { font-size: 11px; color: var(--muted); margin-left: 6px; }
+    .rest-line {
+      padding: 6px 12px; font-size: 12px; color: var(--muted);
+      border-top: 1px solid var(--border); line-height: 1.4;
+    }
+    .rest-line .unmapped { color: hsl(35 60% 42%); }
+    .tag.area { background: color-mix(in srgb, var(--accent) 22%, var(--card)); }
+    .tag.other { outline: 1px dashed hsl(35 60% 50%); }
+
     .empty { color: var(--muted); text-align: center; padding: 24px 0; grid-column: 1 / -1; }
 
     /* ---------- Notes side panel ---------- */
@@ -503,7 +516,7 @@
     function sheetRows() {
       const all = [];
       data.groups.forEach(g => g.exercises.forEach(ex =>
-        all.push(Object.assign({ group: g.name, recoveryDays: g.recoveryDays }, ex, {
+        all.push(Object.assign({ group: g.name, area: g.area || 'Other', recoveryDays: g.recoveryDays }, ex, {
           days: effectiveDays(ex.daysSince),
           noDate: ex.daysSince == null,
           category: categoryOf(ex.section),
@@ -537,6 +550,7 @@
           name: shortest.name,
           freq: parts.map(p => p.freq).find(Boolean) || '',
           group: latest.group,
+          area: latest.area,
           category: latest.category,
           recoveryDays: latest.recoveryDays,
           days: latest.days,
@@ -688,12 +702,107 @@
       return planned.filter(ex => !isDoneToday(ex)).concat(planned.filter(isDoneToday));
     }
 
+    // ---------- Suggested exercises ----------
+    // Picked "as of this morning": logs dated today are ignored for readiness,
+    // so the list doesn't reshuffle as he logs. Done-today items sink and dim.
+    const SUGGEST_PT_MAX = 4;
+    const SUGGEST_BONUS_MAX = 3;
+    const SUGGEST_MAX = 7;
+    const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    // Real days since this exercise before today, or null if never dated (a row
+    // logged today has lost its old date, so it doesn't count).
+    function realDaysBeforeToday(ex) {
+      const prior = ex.slots.filter(s => !s.noDate && !slotToday(s)).map(s => s.days);
+      return prior.length ? Math.min(...prior) : null;
+    }
+    const daysBeforeToday = ex => effectiveDays(realDaysBeforeToday(ex));
+
+    // Per area: days since anything in it was trained (before today), ready or
+    // resting, and the weekday it's ready again.
+    function areaStatus(all) {
+      const out = {};
+      const config = data.areas || [];
+      const daysFor = name => (config.find(a => a.name === name) || { days: 2 }).days;
+      all.forEach(ex => {
+        const a = out[ex.area] || (out[ex.area] = { name: ex.area, days: daysFor(ex.area), since: null });
+        const d = realDaysBeforeToday(ex);
+        if (d != null && (a.since == null || d < a.since)) a.since = d;
+      });
+      const [y, m, d] = data.today.split('-').map(Number);
+      Object.values(out).forEach(a => {
+        a.ready = a.since == null || a.since >= a.days;
+        const until = new Date(y, m - 1, d + (a.days - a.since));
+        a.until = a.days - a.since === 1 ? 'tomorrow' : SHORT_DAYS[until.getDay()];
+      });
+      return out;
+    }
+
+    function suggestedExercises(sections) {
+      const all = [].concat(...sections.map(s => s.exercises));
+      const areas = areaStatus(all);
+      const inPlan = new Set(plannedExercises(sections).map(ex => ex.key));
+      const ready = ex => areas[ex.area] && areas[ex.area].ready;
+      const gap = ex => daysBeforeToday(ex);
+      const byGap = (a, b) => gap(b) - gap(a) || a.firstRow - b.firstRow;
+
+      // 1. PT: weekly goal not met (as of this morning), not done yesterday
+      //    (PT needs a rest day), area ready. Longest gap first.
+      const pt = all.filter(ex => ex.category === 'PT' && !inPlan.has(ex.key) && ready(ex)
+        && ex.weekDone - ex.slots.filter(slotToday).length < ex.weekTarget
+        && !ex.slots.some(s => !s.noDate && s.days === 1))
+        .sort(byGap).slice(0, SUGGEST_PT_MAX);
+
+      // 2. Bonus: one non-PT exercise per ready area not covered by PT, longest gap.
+      const covered = new Set(pt.map(ex => ex.area));
+      const bestPerArea = {};
+      all.filter(ex => ex.category !== 'PT' && !inPlan.has(ex.key) && ready(ex) && !covered.has(ex.area))
+        .forEach(ex => {
+          const cur = bestPerArea[ex.area];
+          if (!cur || byGap(ex, cur) < 0) bestPerArea[ex.area] = ex;
+        });
+      const bonus = Object.values(bestPerArea).sort(byGap).slice(0, SUGGEST_BONUS_MAX);
+
+      const picks = pt.concat(bonus).slice(0, SUGGEST_MAX)
+        .map(ex => Object.assign({}, ex, { suggest: areas[ex.area] }));
+      return {
+        items: picks.filter(ex => !isDoneToday(ex)).concat(picks.filter(isDoneToday)),
+        resting: Object.values(areas).filter(a => !a.ready),
+        unmapped: [...new Set(all.filter(ex => ex.area === 'Other').map(ex => ex.group))],
+      };
+    }
+
+    let suggestOpen = null; // null = default (open unless a plan exists)
+
+    function suggestSection(sections, hasPlan) {
+      const sug = suggestedExercises(sections);
+      const secEl = el('section', 'section wide suggest');
+      const open = suggestOpen == null ? !hasPlan : suggestOpen;
+      if (!open) secEl.classList.add('collapsed');
+      const head = el('div', 'section-head');
+      const name = el('span', 'section-name', 'Suggested — today');
+      name.append(el('span', 'chev', open ? '▾' : '▸'));
+      const done = sug.items.filter(isDoneToday).length;
+      head.append(name, el('span', 'section-count', sug.items.length ? done + ' / ' + sug.items.length + ' done' : ''));
+      head.addEventListener('click', () => { suggestOpen = !open; render(); });
+      secEl.append(head);
+
+      const restParts = sug.resting.map(a => a.name + ' (until ' + a.until + ')');
+      const rest = el('div', 'rest-line', restParts.length ? 'Resting: ' + restParts.join(' · ') : 'Everything is rested.');
+      if (sug.unmapped.length) rest.append(el('span', 'unmapped', ' · Unmapped: ' + sug.unmapped.join(', ')));
+      secEl.append(rest);
+
+      if (!sug.items.length) secEl.append(el('p', 'empty', 'Nothing to suggest — every area is resting or this week\'s PT is done.'));
+      sug.items.forEach(ex => secEl.append(exerciseCard(ex, false)));
+      return secEl;
+    }
+
     function setStatus(text) {
       document.getElementById('status').textContent = text;
     }
 
     function exerciseCard(ex, showTags) {
-      const card = el('div', 'ex' + (ex.plan && isDoneToday(ex) ? ' done' : '')
+      const card = el('div', 'ex' + ((ex.plan || ex.suggest) && isDoneToday(ex) ? ' done' : '')
         + (ex.category === 'PT' && ex.met ? ' met' : ''));
       card.dataset.key = ex.key;
       card.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
@@ -701,6 +810,12 @@
         el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days)));
 
       const meta = el('div', 'ex-meta');
+      if (ex.suggest) {
+        const a = ex.suggest;
+        meta.append(el('span', 'tag area' + (a.name === 'Other' ? ' other' : ''),
+          isDoneToday(ex) ? a.name + ' · ✓ done' : a.name + ' · ready ' + (a.since == null ? 'no log' : a.since + 'd')));
+        meta.append(el('span', 'tag', ex.category));
+      }
       if (showTags) meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
       if (ex.freq) meta.append(el('span', 'tag', ex.freq));
       if (ex.plan) {
@@ -768,7 +883,7 @@
 
     function jumpTo(key) {
       if (sortMode !== 'category') setMode('category');
-      const card = [...document.querySelectorAll('.section:not(.focus) .ex')].find(c => c.dataset.key === key);
+      const card = [...document.querySelectorAll('.section:not(.focus):not(.suggest) .ex')].find(c => c.dataset.key === key);
       if (!card) return;
       card.scrollIntoView({ behavior: 'smooth', block: 'start' });
       card.classList.remove('flash');
@@ -803,10 +918,14 @@
         sections = [{ name: "Today's plan", exercises: planned, wide: true, focus: true }];
       }
 
-      // Focus: today's plan bubbles to the top of the Category and Days views.
+      // Focus: today's plan bubbles to the top of the Category and Days views,
+      // then Suggested (collapsed when a confirmed plan exists — the plan wins).
+      let suggestEl = null;
       if (sortMode === 'category' || sortMode === 'days') {
-        const planned = plannedExercises(sections);
+        const base = buildSections();
+        const planned = plannedExercises(base);
         if (planned.length) sections.unshift({ name: 'Focus — today', exercises: planned, wide: true, focus: true });
+        suggestEl = suggestSection(base, planned.length > 0);
       }
 
       sections.forEach(sec => {
@@ -837,7 +956,9 @@
           exercises.forEach(ex => secEl.append(exerciseCard(ex, true)));
         }
         wrap.append(secEl);
+        if (sec.focus && suggestEl) { wrap.append(suggestEl); suggestEl = null; }
       });
+      if (suggestEl) wrap.prepend(suggestEl);
     }
 
     function setMode(mode) {
