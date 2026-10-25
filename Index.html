@@ -1807,6 +1807,31 @@
       return out;
     }
 
+    // One-time muscle group cleanup (GROUP_RENAMES in code.js): shown until
+    // column A matches, then disappears by itself.
+    function renameBanner(list) {
+      const box = el('section', 'section wide rename-banner');
+      const labels = [...new Set(list.map(r => r.to))];
+      box.append(el('div', 'rest-line', 'Muscle group cleanup: ' + list.length + ' sheet rows get new labels in column A ('
+        + labels.join(', ') + '). Nothing else changes.'));
+      const btn = el('button', 'rest-edit-btn', 'Apply to sheet');
+      btn.type = 'button';
+      btn.addEventListener('click', () => {
+        if (!confirm('Rename column A on ' + list.length + ' rows?')) return;
+        btn.disabled = true;
+        setStatus('Renaming…');
+        google.script.run
+          .withSuccessHandler(result => { data = result; render(); setStatus('Muscle groups updated'); })
+          .withFailureHandler(err => { btn.disabled = false; setStatus('Error: ' + err.message); })
+          .applyGroupRenames();
+      });
+      box.firstChild.append(' ', btn);
+      return box;
+    }
+
+    // Abs subheads read top to bottom: Upper, Middle, Lower, then Obliques.
+    const GROUP_RANK = { 'Upper Abs': 0, 'Middle Abs': 1, 'Lower Abs': 2, 'Obliques': 3 };
+
     function render() {
       const wrap = document.getElementById('groups');
       wrap.innerHTML = '';
@@ -1822,6 +1847,7 @@
       renderPickBar();
       document.body.classList.toggle('pick-view', pickView);
       document.getElementById('view-toggle').textContent = pickView ? 'Full view' : 'Pick view';
+      if (data.renames && data.renames.length) wrap.append(renameBanner(data.renames));
       if (pickView) {
         const base = buildSections();
         pickViewSections(base, upNext).forEach(n => wrap.append(n));
@@ -1884,6 +1910,11 @@
           // Subheadings per muscle group (column A), groups in sheet order.
           const order = [];
           exercises.forEach(ex => { if (!order.includes(ex.group)) order.push(ex.group); });
+          // Keep sheet order, but put the abs groups in GROUP_RANK order
+          // within the slots they already take.
+          const ranked = order.filter(g => g in GROUP_RANK);
+          const sortedAbs = ranked.slice().sort((a, b) => GROUP_RANK[a] - GROUP_RANK[b]);
+          order.forEach((g, i) => { if (g in GROUP_RANK) order[i] = sortedAbs.shift(); });
           order.forEach(g => {
             const list = exercises.filter(ex => ex.group === g);
             const sub = el('div', 'sub');

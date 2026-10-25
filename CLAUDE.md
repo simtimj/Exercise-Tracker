@@ -104,6 +104,13 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - Style (2026-10-25, "rounded squares inside rounded squares"): This week and Suggested are flat panels — `.grp` boxes there have no margin/border/radius, blocks split by a label + thin rule; Suggested cards have no inner facts box. Every summary point is `{ head, body }` rendered by `sumLine()`: `head` = the main idea, underlined but subdued — normal weight, muted color, thin underline (Julius) (`.key`); a 2px tinted rule separates Going well from Suggestions, `body` = muted details underneath. Suggested subheads underline the key part too (`PT`, `1. Arms`) — underline only, not bold (Julius) with the rest in `.sub-rest`.
 - Julius might want AI coaching later (weekly scheduled Claude note into the repo, or the API with a key) — not built.
 
+## Muscle group cleanup (2026-10-25, confirmed by Julius)
+
+- Column A labels standardized: PT → Glute Max (bridge), Glute Med (side-lying abduction, band walks, clams), Hamstrings (RDL), Quads (BSS, step ups), Core (dead bugs, bird dog — was "Core Stab"). Compound → Lats (pull ups), Upper Back (barbell row), Quads (squat, walking lunge), Chest (bench, incline, dips), Shoulders (OHP). Abs (had no column A) → Upper Abs (decline crunch), Middle Abs (ab wheel, plank), Lower Abs (hanging knee raise), Obliques (side plank). Isolation → Shoulders, Biceps, Triceps, Calves, Rear Delts, Upper Back (one-arm row).
+- `GROUP_RENAMES` in `code.js` (keyed by the start of the normalized name, longest key wins via `renameFor()`). `getTrackerData()` returns `renames` = `pendingGroupRenames(rows)`; while non-empty the app shows a one-time banner with an "Apply to sheet" button → `applyGroupRenames()` writes column A only (checks column C first, script lock). Banner disappears once the sheet matches. New exercises: add a row to `GROUP_RENAMES` or just type a known label in column A.
+- `AREAS` keeps the old labels too, so nothing breaks before/after the rename. New labels: Glutes/Hips = glute max, glute med; Legs = quads, hamstrings, calves; Core = core, upper/middle/lower abs, obliques; Back = lats, upper back, lower back, rear delts; Push = chest, shoulders; Arms = biceps, triceps.
+- Category view: abs subheads ordered Upper, Middle, Lower, Obliques (`GROUP_RANK`), everything else in sheet order.
+
 ## Picks: Today / Up next (2026-10-25)
 
 - Ticking items fills `picked` (Set of exercise keys, tap order) and shows a fixed bottom `#pick-bar`: `N selected · Do today · Up next · ✕`.

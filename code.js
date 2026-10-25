@@ -6,13 +6,89 @@ const TAB_NAME = 'V5: PT, Compound, Iso';
 // anything in it was last trained reach `days`. Heat colors use the same days,
 // so colors and suggestions agree. Unmapped labels → OTHER (shown as "Other").
 const AREAS = {
-  'Glutes/Hips': { days: 2, labels: ['glute', 'glutes', 'hips', 'glutes/hips', 'hip rotation'] },
-  Legs: { days: 3, labels: ['lower', 'low', 'legs', 'quads', 'hamstrings', 'calves'] },
-  Core: { days: 1, labels: ['core stab', 'core', 'abs'] },
-  Back: { days: 2, labels: ['upp back', 'up back', 'upback', 'up bk', 'back', 'low back', 'delt'] },
-  Push: { days: 2, labels: ['chest', 'chest, sh', 'shoulders', 'sh'] },
-  Arms: { days: 2, labels: ['biceps', 'tricep', 'triceps'] },
+  'Glutes/Hips': { days: 2, labels: ['glute max', 'glute med', 'glute', 'glutes', 'hips', 'glutes/hips', 'hip rotation'] },
+  Legs: { days: 3, labels: ['quads', 'hamstrings', 'calves', 'lower', 'low', 'legs'] },
+  Core: { days: 1, labels: ['core', 'upper abs', 'middle abs', 'lower abs', 'obliques', 'core stab', 'abs'] },
+  Back: { days: 2, labels: ['lats', 'upper back', 'lower back', 'rear delts', 'upp back', 'up back', 'upback', 'up bk', 'back', 'low back', 'delt'] },
+  Push: { days: 2, labels: ['chest', 'shoulders', 'chest, sh', 'sh'] },
+  Arms: { days: 2, labels: ['biceps', 'triceps', 'tricep'] },
 };
+
+// Muscle group (column A) cleanup, confirmed by Julius 2026-10-25. Keys are
+// the start of the normalized exercise name (normName). applyGroupRenames()
+// writes these to column A once; pendingGroupRenames() lists what's left.
+const GROUP_RENAMES = [
+  ['1 leg weighted glute bridge', 'Glute Max'],
+  ['side lying hip abduction', 'Glute Med'],
+  ['lateral band walks', 'Glute Med'],
+  ['clam shells', 'Glute Med'],
+  ['romanian deadlift', 'Hamstrings'],
+  ['bulgarian split squat', 'Quads'],
+  ['weighted step ups', 'Quads'],
+  ['dead bugs', 'Core'],
+  ['bird dog', 'Core'],
+  ['pull ups', 'Lats'],
+  ['barbell row', 'Upper Back'],
+  ['one-arm dumbbell row', 'Upper Back'],
+  ['rear delt flys', 'Rear Delts'],
+  ['squat', 'Quads'],
+  ['walking lunge', 'Quads'],
+  ['bench press', 'Chest'],
+  ['incline bench press', 'Chest'],
+  ['dips', 'Chest'],
+  ['overhead press', 'Shoulders'],
+  ['lateral raise', 'Shoulders'],
+  ['decline crunch', 'Upper Abs'],
+  ['ab wheel', 'Middle Abs'],
+  ['plank', 'Middle Abs'],
+  ['hanging knee raise', 'Lower Abs'],
+  ['side plank', 'Obliques'],
+  ['bicep curl', 'Biceps'],
+  ['triceps extension', 'Triceps'],
+  ['weighted calf raise', 'Calves'],
+];
+
+function normName(name) {
+  return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// Longest matching key wins ("side plank" over "plank" can't clash since
+// both start the name, but "incline bench press" vs "bench press" can).
+function renameFor(name) {
+  const n = normName(name);
+  let best = null;
+  GROUP_RENAMES.forEach(([key, label]) => {
+    if ((n === key || n.startsWith(key + ' ') || n.startsWith(key + '.') || n.startsWith(key + '('))
+      && (!best || key.length > best[0].length)) best = [key, label];
+  });
+  return best ? best[1] : null;
+}
+
+// Rows (1-based) whose column A differs from the confirmed label.
+function pendingGroupRenames(rows) {
+  const out = [];
+  rows.forEach((row, i) => {
+    if (i === 0) return;
+    const label = renameFor(row[2]);
+    if (label && String(row[0] || '').trim() !== label) out.push({ row: i + 1, name: String(row[2]).trim(), from: String(row[0] || '').trim(), to: label });
+  });
+  return out;
+}
+
+// Called once from the app's banner: writes the new labels to column A only.
+function applyGroupRenames() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_NAME);
+    pendingGroupRenames(sheet.getDataRange().getDisplayValues()).forEach(r => {
+      if (String(sheet.getRange(r.row, 3).getDisplayValue()).trim() === r.name) sheet.getRange(r.row, 1).setValue(r.to);
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  return getTrackerData();
+}
 const OTHER_AREA = { name: 'Other', days: 2 };
 
 // Julius's own recovery days (edited in the app) override the defaults above.
@@ -153,7 +229,9 @@ function getSheetData() {
 
 // Called by the UI: parsed groups + exercises with days since last trained.
 function getTrackerData() {
-  const result = parseRows(getSheetData(), new Date(), loadAreaDays());
+  const rows = getSheetData();
+  const result = parseRows(rows, new Date(), loadAreaDays());
+  result.renames = pendingGroupRenames(rows);
   result.plan = planFor(typeof TODAY_PLAN === 'undefined' ? null : TODAY_PLAN, result.today);
   result.picks = picksFor(loadPicks(), result.today);
   result.history = loadHistory();
@@ -415,5 +493,5 @@ function removeNote(i, text) {
 
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor, appendHistory };
+  module.exports = { pendingGroupRenames, renameFor, parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor, appendHistory };
 }
