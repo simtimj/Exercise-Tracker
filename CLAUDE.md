@@ -45,6 +45,28 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 1. Parse V5 into exercises with muscle group + last-trained date; compute days since last trained per exercise and per group.
 2. Heat-map UI: red = just trained ("hot"), cooling through orange/yellow to green = recovered and ready. Recovery times per muscle group are still to be decided — keep them in one config object.
 3. "Today's plan" (built 2026-10-23): Claude proposes a day's plan as a table, Julius confirms, then Claude writes it into `plan.js` and pushes; it shows under the "Today's plan" button. See Plans below.
+4. **NEXT UP — Suggested exercises (spec agreed 2026-10-25, not built yet).** Julius said "go with whatever you think is best"; build this as specced, ship it, then let him tweak.
+
+## Suggested exercises (to build)
+
+Goal: the app suggests what to do today based on which body areas are rested, so a recently trained area (e.g. glutes) isn't suggested again.
+
+- **Body areas.** Map each column A label (lowercased, trimmed) to one of six areas in a single `AREAS` config object, replacing/absorbing `RECOVERY_DAYS` in `code.js` (or a client-side config in `Index.html` — keep it in one place):
+  - Glutes/Hips — glute, glutes, hips, glutes/hips, hip rotation
+  - Legs — lower, low, legs, quads, hamstrings, calves
+  - Core — core stab, core, abs (Abs rows have no column A; their group is "Abs")
+  - Back — upp back, up back, upback, up bk, back, low back, delt (rear delt flys are a pull)
+  - Push — chest, "chest, sh", shoulders, sh
+  - Arms — biceps, tricep, triceps
+  - Unmapped label → "Other", 2 days; show it so it's easy to spot and map later.
+- **Recovery days per area (starting values):** Glutes/Hips 2, Legs 3, Core 1, Back 2, Push 2, Arms 2. An area is **ready** when days since the most recent exercise logged in that area ≥ its recovery days. The card heat colors should use the area's recovery days too, so colors and suggestions agree.
+- **Picking (client side, from the merged exercises):**
+  1. PT first: PT exercises that haven't met their weekly goal (`!ex.met`), weren't done today or yesterday (PT needs a rest day between sessions), and whose area is ready. Longest gap first. Max 4.
+  2. Then bonus: for each ready area not already covered by a PT pick, the non-PT exercise with the longest gap (no-date = 30 days, as elsewhere). Max 1 per area, ~3 total.
+  3. Cap the list at ~6–7 items.
+- **UI:** a "Suggested — today" section pinned at the top of the Category and Days views (same card style as the Focus table, logging works the same). Each card gets a small `Glutes/Hips · ready 3d` style tag. Under the section header, one muted line listing resting areas: `Resting: Legs (until Tue) · Core (until Mon)`. If a `TODAY_PLAN` exists for today, show the plan's Focus table first and Suggested below it (or collapsed) — the confirmed plan wins.
+- Items logged today drop to the bottom of Suggested and dim, like the Focus table.
+- Test with the real sheet CSV via jsdom (export via the Drive connector `download_file_content` with `text/csv`), then ship.
 
 ## Plans
 
