@@ -294,6 +294,10 @@
       background: color-mix(in srgb, var(--zone) 24%, var(--card));
     }
     .section.focus .section-name, .section.suggest .section-name, .section.upnext .section-name { font-size: 16px; }
+    .section.summary { --zone: var(--z-next); }
+    .section.summary .chev { font-size: 11px; color: var(--muted); }
+    .sum-line { margin: 0; padding: 8px 12px; font-size: 14px; line-height: 1.45; border-top: 1px solid var(--border); }
+    .grp > .sub + .sum-line { border-top: 0; }
     .grp {
       margin: 8px; border: 1px solid var(--border); border-radius: 10px;
       overflow: hidden; background: var(--card);
@@ -1077,7 +1081,7 @@
           grp = el('div', 'grp');
           secEl.insertBefore(grp, n);
           grp.append(n);
-        } else if (grp && (n.classList.contains('ex') || n.classList.contains('pick-row') || n.classList.contains('empty'))) {
+        } else if (grp && ['ex', 'pick-row', 'empty', 'sum-line'].some(c => n.classList.contains(c))) {
           grp.append(n);
         } else {
           grp = null;
@@ -1168,6 +1172,151 @@
         secEl.append(row);
       });
       return secEl;
+    }
+
+    // ---------- This week: honest summary + plain-English suggestions ----------
+    // Counts only what was actually logged in the last SUMMARY_DAYS days:
+    // the saved log history (data.history, "YYYY-MM-DD|row", from each Log)
+    // plus each sheet row's latest date. Praise scales with the real amount.
+    const SUMMARY_DAYS = 7;
+    const OVERDUE_DAYS = 7; // an area untouched this long gets called out
+    const AREA_WORDS = { 'Glutes/Hips': 'glutes and hips', Legs: 'legs', Core: 'core', Back: 'back',
+      Push: 'chest and shoulders', Arms: 'arms', Other: 'other exercises' };
+    const AREA_DETAIL = { Arms: 'biceps, triceps', Back: 'rows, pull-ups, rear delts', Push: 'chest, shoulders',
+      Legs: 'quads, hamstrings, calves', 'Glutes/Hips': 'glutes, hips', Core: 'core stability, abs' };
+
+    function isoMinusDays(iso, n) {
+      const [y, m, d] = iso.split('-').map(Number);
+      const t = new Date(y, m - 1, d - n);
+      return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+    }
+
+    function listText(items) {
+      if (items.length <= 1) return items.join('');
+      return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
+    }
+
+    // Distinct logs (date + sheet row) in the window, each with its exercise.
+    function recentLogs(all) {
+      const byRow = {};
+      all.forEach(ex => ex.slots.forEach(s => { byRow[s.row] = ex; }));
+      const from = isoMinusDays(data.today, SUMMARY_DAYS - 1);
+      const seen = new Set();
+      (data.history || []).forEach(e => {
+        const [d, r] = String(e).split('|');
+        if (d >= from && d <= data.today && byRow[r]) seen.add(d + '|' + r);
+      });
+      all.forEach(ex => ex.slots.forEach(s => { if (!s.noDate && s.lastDate >= from) seen.add(s.lastDate + '|' + s.row); }));
+      return [...seen].map(k => { const [d, r] = k.split('|'); return { date: d, ex: byRow[r] }; });
+    }
+
+    function amountWords(n) {
+      return n >= 6 ? 'a lot of work on' : n >= 3 ? 'a decent amount of work on' : 'a little work on';
+    }
+
+    function weekSummary(sections) {
+      const all = [].concat(...sections.map(s => s.exercises));
+      const logs = recentLogs(all);
+      const sug = suggestedExercises(sections);
+
+      // Per area: logs and distinct days in the window.
+      const byArea = {};
+      logs.forEach(l => {
+        const a = byArea[l.ex.area] || (byArea[l.ex.area] = { name: l.ex.area, n: 0, days: new Set() });
+        a.n++;
+        a.days.add(l.date);
+      });
+      const worked = Object.values(byArea).sort((a, b) => b.n - a.n);
+
+      // Days since each area was trained, today included.
+      const since = {};
+      all.forEach(ex => ex.slots.forEach(s => {
+        if (s.noDate) { if (!(ex.area in since)) since[ex.area] = null; return; }
+        if (since[ex.area] == null || s.days < since[ex.area]) since[ex.area] = s.days;
+      }));
+
+      const good = [];
+      const tips = [];
+      const total = logs.length;
+      if (!total) {
+        good.push('Nothing logged in the last ' + SUMMARY_DAYS + ' days. No judgment — today is a good day to restart, PT first.');
+      } else {
+        const parts = worked.map(a => amountWords(a.n) + ' ' + AREA_WORDS[a.name] + ' (' + a.n + ' exercise'
+          + (a.n === 1 ? '' : 's') + ', ' + a.days.size + ' day' + (a.days.size === 1 ? '' : 's') + ')');
+        good.push((total >= 6 ? 'Nice — ' : total >= 3 ? 'Good work — ' : 'Good start — ') + 'in the last ' + SUMMARY_DAYS + ' days you put in ' + listText(parts) + '.');
+      }
+
+      // PT: praise only what's real; what's missing goes to suggestions.
+      const pt = (sections.find(s => s.name === 'PT') || { exercises: [] }).exercises;
+      const met = pt.filter(ex => ex.met).length;
+      const started = pt.filter(ex => !ex.met && ex.weekDone > 0).length;
+      if (pt.length && met === pt.length) good.push('All your PT is done for the week — great consistency.');
+      else if (met) good.push('You\'ve finished ' + met + ' of ' + pt.length + ' PT exercises for the week' + (started ? ', and ' + started + ' more are started.' : '.'));
+      else if (started) good.push('PT is underway: ' + started + ' of ' + pt.length + ' started this week.');
+
+      // Suggestions, most important first.
+      const owed = sug.pt.filter(ex => !isDoneToday(ex));
+      if (owed.length) {
+        const now = owed.filter(ex => !ex.why).slice(0, 2).map(ex => ex.name);
+        tips.push('PT comes first: ' + owed.length + ' exercise' + (owed.length === 1 ? '' : 's') + ' still need a session this week'
+          + (now.length ? ' — start with ' + listText(now) + '.' : '. The areas are resting today, so pick them up when they\'re ready.'));
+      } else if (pt.length && met < pt.length) {
+        tips.push('PT is on track for today — the rest is due after a rest day.');
+      }
+
+      const overdue = Object.keys(since).filter(a => a !== 'Other' && (since[a] == null || since[a] >= OVERDUE_DAYS))
+        .sort((a, b) => effectiveDays(since[b]) - effectiveDays(since[a])).slice(0, 2);
+      overdue.forEach(a => {
+        const block = sug.blocks.find(b => b.area.name === a);
+        const tryNames = block ? block.items.map(ex => ex.name) : [];
+        const detail = AREA_DETAIL[a] ? ' (' + AREA_DETAIL[a] + ')' : '';
+        tips.push((since[a] == null ? 'You haven\'t logged any ' + AREA_WORDS[a] + detail + ' yet.'
+          : 'It\'s been ' + since[a] + ' days since you did any ' + AREA_WORDS[a] + detail + '.')
+          + (tryNames.length ? ' Try ' + (tryNames.length === 1 ? tryNames[0]
+            : tryNames.slice(0, -1).join(', ') + ' or ' + tryNames[tryNames.length - 1]) + '.' : ''));
+      });
+
+      // Lopsided week: one area is half or more of the work.
+      if (total >= 4 && worked[0].n / total > 0.5 && overdue.length) {
+        tips.push('Most of your recent work has been ' + AREA_WORDS[worked[0].name] + ' — mixing in '
+          + AREA_WORDS[overdue[0]] + ' would even things out.');
+      }
+      if (!tips.length) tips.push('Nothing overdue — keep following Suggested.');
+      return { good, tips };
+    }
+
+    // Folded state is remembered per device (localStorage, best-effort).
+    let summaryOpen = true;
+    try { summaryOpen = localStorage.getItem('summaryOpen') !== '0'; } catch (e) {}
+
+    function summarySection(sections) {
+      const sum = weekSummary(sections);
+      const secEl = el('section', 'section wide summary');
+      secEl.id = 'summary-sec';
+      const head = el('div', 'section-head');
+      const name = el('span', 'section-name', 'This week');
+      name.append(el('span', 'chev', summaryOpen ? ' ▾' : ' ▸'));
+      head.append(name, el('span', 'section-count', 'last ' + SUMMARY_DAYS + ' days'));
+      head.style.cursor = 'pointer';
+      head.addEventListener('click', () => {
+        summaryOpen = !summaryOpen;
+        try { localStorage.setItem('summaryOpen', summaryOpen ? '1' : '0'); } catch (e) {}
+        render();
+      });
+      secEl.append(head);
+      if (!summaryOpen) {
+        // Folded: just the top suggestion.
+        secEl.append(el('p', 'sum-line', sum.tips[0]));
+        return secEl;
+      }
+      [['Going well', sum.good], ['Suggestions', sum.tips]].forEach(([label, lines]) => {
+        if (!lines.length) return;
+        const sub = el('div', 'sub');
+        sub.append(el('span', '', label));
+        secEl.append(sub);
+        lines.forEach(t => secEl.append(el('p', 'sum-line', t)));
+      });
+      return boxGroups(secEl);
     }
 
     // ---------- Recovery days editor ----------
@@ -1371,6 +1520,7 @@
       if (sortMode === 'category' || sortMode === 'days') {
         const base = buildSections();
         const planned = plannedExercises(base);
+        wrap.append(summarySection(base));
         wrap.append(sectionEl({ id: 'today-sec', name: 'Today', exercises: planned, wide: true, focus: true,
           emptyText: 'Nothing planned yet. Tick suggestions below, or tap + Today on any exercise.' }));
         wrap.append(suggestSection(base));

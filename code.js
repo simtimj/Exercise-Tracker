@@ -105,6 +105,41 @@ function savePicks(picks) {
   return getTrackerData();
 }
 
+// Log history for the summary card. The sheet keeps only the latest date per
+// row, so each Log also saves "YYYY-MM-DD|row" here (user properties, newest
+// last, HISTORY_DAYS / HISTORY_MAX kept). Never written to the sheet.
+const HISTORY_KEY = 'history';
+const HISTORY_DAYS = 60;
+const HISTORY_MAX = 500;
+
+function appendHistory(list, todayIso, row) {
+  const cutoff = new Date(todayIso + 'T00:00:00');
+  cutoff.setDate(cutoff.getDate() - HISTORY_DAYS);
+  const min = isoDate(cutoff);
+  const entry = todayIso + '|' + row;
+  const out = (Array.isArray(list) ? list : []).filter(e => typeof e === 'string' && e.slice(0, 10) >= min && e !== entry);
+  out.push(entry);
+  return out.slice(-HISTORY_MAX);
+}
+
+function loadHistory() {
+  try {
+    const list = JSON.parse(PropertiesService.getUserProperties().getProperty(HISTORY_KEY) || '[]');
+    return Array.isArray(list) ? list.filter(e => typeof e === 'string') : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function recordHistory(row) {
+  try {
+    const list = appendHistory(loadHistory(), isoDate(new Date()), row);
+    PropertiesService.getUserProperties().setProperty(HISTORY_KEY, JSON.stringify(list));
+  } catch (e) {
+    // History is a nice-to-have; never block a log on it.
+  }
+}
+
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Exercise Tracker')
@@ -121,6 +156,7 @@ function getTrackerData() {
   const result = parseRows(getSheetData(), new Date(), loadAreaDays());
   result.plan = planFor(typeof TODAY_PLAN === 'undefined' ? null : TODAY_PLAN, result.today);
   result.picks = picksFor(loadPicks(), result.today);
+  result.history = loadHistory();
   return result;
 }
 
@@ -295,6 +331,7 @@ function logExercise(row, name, entry) {
       sheet.getRange(row, 4, 1, cells.length).setValues([cells]);
     }
     SpreadsheetApp.flush();
+    recordHistory(row);
   } finally {
     lock.releaseLock();
   }
@@ -378,5 +415,5 @@ function removeNote(i, text) {
 
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor };
+  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor, appendHistory };
 }

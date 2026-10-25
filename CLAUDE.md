@@ -89,6 +89,14 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - Top buttons are **jump buttons**: Today · Suggested · Up next · All (scroll to `#today-sec`, `#suggest-sec`, `#next-sec`, `#all-sec` below the sticky header; `markZone()` highlights the one in view). "Done today" and "Plan" views were removed (Today covers both). The Category / Days sort is a small toggle on the "All exercises" divider (`setMode()`). Up next is always shown, with an empty state.
 - Every card not already in Today has a `+ Today` button (`✓ Today` once added) → `movePicks([key], 'today')`.
 
+## This week summary (2026-10-25)
+
+- "This week" card at the very top (`summarySection()` / `weekSummary()`, above Today; collapsible, folded state in localStorage `summaryOpen`, folded = top suggestion only). Two parts, rule-based, no AI:
+  - **Going well** — honest: counts real logs in the last `SUMMARY_DAYS` (7) per area; wording scales with the amount (≥6 "a lot of work on", ≥3 "a decent amount of", else "a little"), opener "Nice" only at ≥6 logs total. PT praise only for met/started; nothing logged → says so plainly.
+  - **Suggestions** — PT owed first (names the first two rested ones), then up to 2 areas untouched ≥ `OVERDUE_DAYS` (7) in plain English with what they cover (`AREA_DETAIL`, e.g. "arms (biceps, triceps)") and the Suggested picks to try, then a lopsided-week note if one area is >50% of the work.
+- Counts come from `data.history` plus each row's latest sheet date (deduped by date + row). **History:** `logExercise()` calls `recordHistory(row)` → user properties key `history`, `"YYYY-MM-DD|row"` strings, last 60 days / 500 entries (`appendHistory()`, exported for tests). Started 2026-10-25, so repeat sessions before then aren't counted. Never written to the sheet.
+- Julius might want AI coaching later (weekly scheduled Claude note into the repo, or the API with a key) — not built.
+
 ## Picks: Today / Up next (2026-10-25)
 
 - Ticking items fills `picked` (Set of exercise keys, tap order) and shows a fixed bottom `#pick-bar`: `N selected · Do today · Up next · ✕`.
