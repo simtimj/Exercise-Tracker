@@ -280,6 +280,28 @@
     .tag.area { background: color-mix(in srgb, var(--accent) 22%, var(--card)); }
     .tag.other { outline: 1px dashed hsl(35 60% 50%); }
 
+    /* Recovery days editor (inside Suggested). */
+    .rest-edit-btn {
+      margin-left: 6px; padding: 1px 8px; font-size: 12px;
+      border: 1px solid var(--border); border-radius: 999px;
+      background: var(--card); color: var(--text);
+    }
+    .section.suggest.collapsed .rest-edit { display: none; }
+    .rest-edit { padding: 8px 12px 10px; border-top: 1px solid var(--border); font-size: 14px; }
+    .rest-edit .hint { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+    .rest-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+    .rest-row .rest-name { flex: 1; }
+    .rest-row .rest-def { font-size: 11px; color: var(--muted); min-width: 5.5em; text-align: right; }
+    .rest-row button, .rest-actions button {
+      min-width: 34px; height: 32px; padding: 0 10px; font-size: 15px;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: var(--card); color: var(--text);
+    }
+    .rest-row .rest-val { min-width: 2.6em; text-align: center; font-weight: 600; }
+    .rest-row.changed .rest-val { color: var(--accent); }
+    .rest-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+    .rest-actions .rest-msg { font-size: 12px; color: var(--muted); }
+
     .empty { color: var(--muted); text-align: center; padding: 24px 0; grid-column: 1 / -1; }
 
     /* ---------- Notes side panel ---------- */
@@ -774,6 +796,55 @@
 
     let suggestOpen = null; // null = default (open unless a plan exists)
 
+    // ---------- Recovery days editor ----------
+    // Draft edits stay local until Save; saved values live server-side
+    // (saveAreaDays) and drive both suggestions and heat colors.
+    let restEditOpen = false;
+    let restDraft = null; // { areaName: days } while editing
+
+    function restEditor() {
+      const areas = data.areas || [];
+      if (!restDraft) restDraft = Object.fromEntries(areas.map(a => [a.name, a.days]));
+      const box = el('div', 'rest-edit');
+      box.append(el('p', 'hint', 'Days an area rests before it\'s suggested again. Also sets the heat colors.'));
+      areas.forEach(a => {
+        const v = restDraft[a.name];
+        const row = el('div', 'rest-row' + (v !== a.defaultDays ? ' changed' : ''));
+        const minus = el('button', '', '−');
+        const plus = el('button', '', '+');
+        minus.type = plus.type = 'button';
+        minus.disabled = v <= 1;
+        plus.disabled = v >= 14;
+        minus.addEventListener('click', () => { restDraft[a.name] = v - 1; render(); });
+        plus.addEventListener('click', () => { restDraft[a.name] = v + 1; render(); });
+        row.append(el('span', 'rest-name', a.name), el('span', 'rest-def', v !== a.defaultDays ? 'default ' + a.defaultDays : ''),
+          minus, el('span', 'rest-val', v + 'd'), plus);
+        box.append(row);
+      });
+      const actions = el('div', 'rest-actions');
+      const dirty = areas.some(a => restDraft[a.name] !== a.days);
+      const save = el('button', '', 'Save');
+      const reset = el('button', '', 'Defaults');
+      save.type = reset.type = 'button';
+      save.disabled = !dirty;
+      const msg = el('span', 'rest-msg', dirty ? 'Unsaved changes' : '');
+      save.addEventListener('click', () => {
+        save.disabled = true;
+        msg.textContent = 'Saving…';
+        google.script.run
+          .withSuccessHandler(result => { data = result; restDraft = null; restEditOpen = false; render(); })
+          .withFailureHandler(err => { msg.textContent = 'Error: ' + err.message; save.disabled = false; })
+          .saveAreaDays(restDraft);
+      });
+      reset.addEventListener('click', () => {
+        restDraft = Object.fromEntries(areas.map(a => [a.name, a.defaultDays]));
+        render();
+      });
+      actions.append(save, reset, msg);
+      box.append(actions);
+      return box;
+    }
+
     function suggestSection(sections, hasPlan) {
       const sug = suggestedExercises(sections);
       const secEl = el('section', 'section wide suggest');
@@ -790,7 +861,12 @@
       const restParts = sug.resting.map(a => a.name + ' (until ' + a.until + ')');
       const rest = el('div', 'rest-line', restParts.length ? 'Resting: ' + restParts.join(' · ') : 'Everything is rested.');
       if (sug.unmapped.length) rest.append(el('span', 'unmapped', ' · Unmapped: ' + sug.unmapped.join(', ')));
+      const editBtn = el('button', 'rest-edit-btn', restEditOpen ? 'Done' : 'Rest days ✎');
+      editBtn.type = 'button';
+      editBtn.addEventListener('click', () => { restEditOpen = !restEditOpen; restDraft = null; render(); });
+      rest.append(editBtn);
       secEl.append(rest);
+      if (restEditOpen) secEl.append(restEditor());
 
       if (!sug.items.length) secEl.append(el('p', 'empty', 'Nothing to suggest — every area is resting or this week\'s PT is done.'));
       sug.items.forEach(ex => secEl.append(exerciseCard(ex, false)));

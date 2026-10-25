@@ -15,12 +15,52 @@ const AREAS = {
 };
 const OTHER_AREA = { name: 'Other', days: 2 };
 
-function areaFor(group) {
+// Julius's own recovery days (edited in the app) override the defaults above.
+// Stored as JSON in user properties under AREA_DAYS_KEY — never in the sheet.
+const AREA_DAYS_KEY = 'areaDays';
+const AREA_DAYS_MIN = 1;
+const AREA_DAYS_MAX = 14;
+
+function areaDaysFor(name, overrides) {
+  const o = overrides && overrides[name];
+  if (Number.isInteger(o)) return o;
+  return name === OTHER_AREA.name ? OTHER_AREA.days : AREAS[name].days;
+}
+
+function areaFor(group, overrides) {
   const key = String(group || '').trim().toLowerCase();
   for (const name in AREAS) {
-    if (AREAS[name].labels.includes(key)) return { name: name, days: AREAS[name].days };
+    if (AREAS[name].labels.includes(key)) return { name: name, days: areaDaysFor(name, overrides) };
   }
-  return { name: OTHER_AREA.name, days: OTHER_AREA.days };
+  return { name: OTHER_AREA.name, days: areaDaysFor(OTHER_AREA.name, overrides) };
+}
+
+// Keeps only known areas with whole days in range.
+function cleanAreaDays(input) {
+  const out = {};
+  const names = Object.keys(AREAS).concat(OTHER_AREA.name);
+  Object.keys(input || {}).forEach(name => {
+    const n = Number(input[name]);
+    if (names.includes(name) && Number.isInteger(n) && n >= AREA_DAYS_MIN && n <= AREA_DAYS_MAX) out[name] = n;
+  });
+  return out;
+}
+
+function loadAreaDays() {
+  try {
+    return cleanAreaDays(JSON.parse(PropertiesService.getUserProperties().getProperty(AREA_DAYS_KEY) || '{}'));
+  } catch (e) {
+    return {};
+  }
+}
+
+// Called by the UI. days = { areaName: n }; only values that differ from the
+// defaults are kept, so changing a default later still takes effect.
+function saveAreaDays(days) {
+  const clean = cleanAreaDays(days);
+  Object.keys(clean).forEach(name => { if (clean[name] === areaDaysFor(name, null)) delete clean[name]; });
+  PropertiesService.getUserProperties().setProperty(AREA_DAYS_KEY, JSON.stringify(clean));
+  return getTrackerData();
 }
 
 function doGet() {
@@ -36,7 +76,7 @@ function getSheetData() {
 
 // Called by the UI: parsed groups + exercises with days since last trained.
 function getTrackerData() {
-  const result = parseRows(getSheetData(), new Date());
+  const result = parseRows(getSheetData(), new Date(), loadAreaDays());
   result.plan = planFor(typeof TODAY_PLAN === 'undefined' ? null : TODAY_PLAN, result.today);
   return result;
 }
@@ -53,8 +93,8 @@ function planFor(plan, today) {
   }));
 }
 
-function recoveryDaysFor(group) {
-  return areaFor(group).days;
+function recoveryDaysFor(group, overrides) {
+  return areaFor(group, overrides).days;
 }
 
 // Pulls "M/D" out of free text like "9/22 Tues | …". No year in the sheet,
@@ -81,7 +121,7 @@ function isoDate(d) {
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
 }
 
-function parseRows(rows, today) {
+function parseRows(rows, today, overrides) {
   const groups = [];
   const byName = {};
   let section = '';
@@ -113,8 +153,8 @@ function parseRows(rows, today) {
     if (!byName[groupName]) {
       byName[groupName] = {
         name: groupName,
-        area: areaFor(groupName).name,
-        recoveryDays: areaFor(groupName).days,
+        area: areaFor(groupName, overrides).name,
+        recoveryDays: areaFor(groupName, overrides).days,
         exercises: [],
         lastDate: null,
         daysSince: null,
@@ -141,8 +181,11 @@ function parseRows(rows, today) {
     }
   });
 
-  const areas = Object.keys(AREAS).map(name => ({ name: name, days: AREAS[name].days }));
-  areas.push({ name: OTHER_AREA.name, days: OTHER_AREA.days });
+  const areas = Object.keys(AREAS).concat(OTHER_AREA.name).map(name => ({
+    name: name,
+    days: areaDaysFor(name, overrides),
+    defaultDays: areaDaysFor(name, null),
+  }));
   return { today: isoDate(today), groups: groups, areas: areas };
 }
 
@@ -292,5 +335,5 @@ function removeNote(i, text) {
 
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, areaFor, replaceDateText, buildSetCells, planFor, notesFrom };
+  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom };
 }

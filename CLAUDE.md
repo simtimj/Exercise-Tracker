@@ -45,7 +45,8 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 1. Parse V5 into exercises with muscle group + last-trained date; compute days since last trained per exercise and per group.
 2. Heat-map UI: red = just trained ("hot"), cooling through orange/yellow to green = recovered and ready. Recovery times per muscle group are still to be decided — keep them in one config object.
 3. "Today's plan" (built 2026-10-23): Claude proposes a day's plan as a table, Julius confirms, then Claude writes it into `plan.js` and pushes; it shows under the "Today's plan" button. See Plans below.
-4. Suggested exercises — built and shipped 2026-10-25 (see below). Next: let Julius tweak recovery days / picks.
+4. Suggested exercises — built and shipped 2026-10-25 (see below).
+5. Editable recovery days — shipped 2026-10-25 (see below). Next: let Julius tweak picks.
 
 ## Suggested exercises (built 2026-10-25)
 
@@ -69,6 +70,12 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - **UI:** a "Suggested — today" section pinned at the top of the Category and Days views (same card style as the Focus table, logging works the same). Each card gets a small `Glutes/Hips · ready 3d` style tag. Under the section header, one muted line listing resting areas: `Resting: Legs (until Tue) · Core (until Mon)`. If a `TODAY_PLAN` exists for today, show the plan's Focus table first and Suggested below it (or collapsed) — the confirmed plan wins.
 - Items logged today drop to the bottom of Suggested and dim, like the Focus table.
 - Test with the real sheet CSV via jsdom (export via the Drive connector `download_file_content` with `text/csv`), then ship.
+
+## Editable recovery days (2026-10-25)
+
+- "Rest days ✎" button on the Suggested section's Resting line opens an inline editor: one −/+ stepper per area (1–14 days), "default N" shown when changed, Save / Defaults.
+- Saved via `saveAreaDays(days)` into Apps Script **user properties** (key `areaDays`, JSON) — not the sheet. Only values that differ from `AREAS` defaults are stored, so changing a default in code still applies. `loadAreaDays()` → `parseRows(rows, today, overrides)` → `areaFor(group, overrides)`; `areas` now includes `defaultDays`. Heat colors and suggestions both use the saved values.
+- Claude can't read user properties from its workspace; ask Julius for his current values if they matter.
 
 ## Plans
 
