@@ -1470,7 +1470,8 @@
         secEl.append(sumLine(sum.tips[0]));
         return secEl;
       }
-      [['Going well', sum.good], ['Suggestions', sum.tips]].forEach(([label, lines]) => {
+      // Going well was dropped (Julius, 2026-10-25) — suggestions only.
+      [['Suggestions', sum.tips]].forEach(([label, lines]) => {
         if (!lines.length) return;
         const sub = el('div', 'sub');
         sub.append(el('span', '', label));
