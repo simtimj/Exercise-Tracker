@@ -195,20 +195,25 @@
       color: var(--text);
     }
 
-    /* Labelled boxes: Last done, This wk, Prev, Prev 2. */
-    .box {
-      display: inline-block;
-      padding: 1px 6px;
-      margin: 3px 4px 0 0;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      background: var(--card);
-      font-size: 11px;
-      color: var(--text);
-      white-space: nowrap;
+    /* Facts block: one row each for Last, This wk, Prev, Prev 2 —
+       labels in a fixed left column so values line up. */
+    .facts {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 2px 10px;
+      margin-top: 6px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--card) 70%, transparent);
+      font-size: 12px;
+      line-height: 1.35;
     }
-    .box b { font-weight: 600; color: var(--muted); }
+    .facts dt { color: var(--muted); font-weight: 600; }
+    .facts dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+    .facts .sep { color: var(--muted); padding: 0 4px; }
     .dots { letter-spacing: 1px; color: var(--accent); }
+    .dots-n { color: var(--muted); margin-left: 6px; }
 
     .pill {
       align-self: start;
@@ -586,38 +591,47 @@
 
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    function box(label, value, valueCls) {
-      const b = el('span', 'box');
-      b.append(el('b', '', label + ' '));
-      b.append(valueCls ? el('span', valueCls, value) : document.createTextNode(value));
-      return b;
-    }
-
     const cleanEntry = s => String(s || '').replace(/\s+/g, ' ').replace(/[,.\s]+$/, '');
 
-    // Last done (newest row) · Sep wk 4 of 5 · This wk ●●○ · Prev · Prev 2.
+    // Facts block, one labelled row each:
+    //   Last     10/22 Thurs · Oct wk 4 of 5
+    //   This wk  ●●○  2 of 3
+    //   Prev     light band, 20,20
+    //   Prev 2   light band, 15,15
     function historyLine(ex) {
-      const line = el('div', 'ex-meta');
+      const facts = el('dl', 'facts');
+      const row = (label, ...values) => {
+        const dd = el('dd');
+        dd.append(...values);
+        facts.append(el('dt', '', label), dd);
+      };
+
       const text = String(ex.dateText || '');
       const [datePart, ...rest] = text.split('|').map(t => t.trim());
+      const extra = rest.join(' | ');
+      const wk = extra.match(/^wk\s*(\d)\s*\/\s*(\d)$/i);
       if (!ex.noDate) {
-        line.append(box('Last', datePart));
-        const extra = rest.join(' | ');
-        const wk = extra.match(/^wk\s*(\d)\s*\/\s*(\d)$/i);
-        if (wk) line.append(box(MONTHS[Number(ex.lastDate.slice(5, 7)) - 1] + ' wk', wk[1] + ' of ' + wk[2]));
-        else if (extra && extra !== 'i') line.append(document.createTextNode(extra + ' '));
+        const parts = [document.createTextNode(datePart)];
+        if (wk) parts.push(el('span', 'sep', '·'), document.createTextNode(MONTHS[Number(ex.lastDate.slice(5, 7)) - 1] + ' wk ' + wk[1] + ' of ' + wk[2]));
+        else if (extra && extra !== 'i') parts.push(el('span', 'sep', '·'), document.createTextNode(extra));
+        row('Last', ...parts);
+      } else if (text.trim() && text.trim() !== 'i') {
+        row('Note', document.createTextNode(text.trim()));
       }
-      if (ex.slots.length > 1) {
+
+      if (ex.slots.length > 1 || ex.category === 'PT') {
         const n = ex.slots.length;
-        line.append(box('This wk', '●'.repeat(ex.weekDone) + '○'.repeat(n - ex.weekDone), 'dots'));
+        row('This wk', el('span', 'dots', '●'.repeat(ex.weekDone) + '○'.repeat(Math.max(0, n - ex.weekDone))),
+          el('span', 'dots-n', ex.weekDone + ' of ' + ex.weekTarget + (ex.met ? ' ✓' : '')));
       }
+
       // One row: its last two logs. Several rows: the newest log of each, newest row first.
       const entries = ex.slots.length > 1
         ? ex.recent.map(s => cleanEntry((s.sets || [])[0])).filter(Boolean)
         : (ex.latest.sets || []).map(cleanEntry).filter(Boolean);
-      if (entries[0]) line.append(box('Prev', entries[0]));
-      if (entries[1]) line.append(box('Prev 2', entries[1]));
-      return line.childNodes.length ? line : null;
+      if (entries[0]) row('Prev', document.createTextNode(entries[0]));
+      if (entries[1]) row('Prev 2', document.createTextNode(entries[1]));
+      return facts.childNodes.length ? facts : null;
     }
 
     // Plan from plan.js, matched by row (falls back to name if rows moved).
