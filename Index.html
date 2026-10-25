@@ -5,12 +5,17 @@
   <base target="_top">
   <style>
     :root {
-      --bg: #f4f3ef;
+      /* A touch of purple; zone colors mark the pinned sections. */
+      --bg: #f3f1f7;
       --card: #ffffff;
-      --text: #2a2a27;
-      --muted: #77766f;
-      --border: #e4e2dc;
-      --soft: #ecebe6;
+      --section: #ebe8f2;
+      --text: #26232e;
+      --muted: #74707f;
+      --border: #dcd7e6;
+      --soft: #e7e3ef;
+      --z-today: hsl(268 45% 56%);
+      --z-suggest: hsl(248 40% 58%);
+      --z-next: hsl(290 22% 60%);
       /* Heat tones are kept low-saturation so the list isn't shouty. */
       --heat-sat: 32%;
       --heat-light: 58%;
@@ -19,12 +24,16 @@
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #171716;
-        --card: #212120;
-        --text: #ecebe6;
-        --muted: #9d9c95;
-        --border: #33332f;
-        --soft: #2a2a28;
+        --bg: #13111a;
+        --card: #1f1b28;
+        --section: #18151f;
+        --text: #ecebf3;
+        --muted: #a29eb2;
+        --border: #342f42;
+        --soft: #2a2537;
+        --z-today: hsl(268 50% 66%);
+        --z-suggest: hsl(248 45% 68%);
+        --z-next: hsl(290 25% 66%);
         --heat-sat: 28%;
         --heat-light: 52%;
         --tint: 0%;
@@ -97,7 +106,7 @@
     }
 
     .controls button.active {
-      background: var(--card);
+      background: color-mix(in srgb, var(--z-today) 28%, var(--card));
       color: var(--text);
       font-weight: 600;
       box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
@@ -126,7 +135,7 @@
     #groups {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 18px;
+      gap: 22px;
       align-items: start;
     }
 
@@ -141,7 +150,6 @@
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      overflow: hidden;
     }
 
     .section-head {
@@ -264,17 +272,41 @@
     .log button:disabled { opacity: 0.5; }
 
     /* Focus table: today's plan pinned above every list. */
-    /* Pinned zones (Today, Suggested) get a dark header so they stand apart
-       from the plain exercise lists below — contrast, not color. */
-    .section.focus, .section.suggest { border: 1.5px solid var(--text); }
-    .section.focus .section-head, .section.suggest .section-head { background: var(--text); color: var(--bg); }
-    .section.focus .section-count, .section.suggest .section-count, .section.suggest .chev { color: color-mix(in srgb, var(--bg) 70%, var(--text)); }
+    /* Each section is a tinted frame; blocks inside it (.grp) are their own
+       rounded boxes with space around them. Pinned zones get their own
+       purple shade on the border, header and a left stripe. */
+    .section { --zone: var(--muted); background: var(--section); }
+    .section.focus { --zone: var(--z-today); }
+    .section.suggest { --zone: var(--z-suggest); }
+    .section.upnext { --zone: var(--z-next); }
+    .section.focus, .section.suggest, .section.upnext {
+      border: 1.5px solid color-mix(in srgb, var(--zone) 70%, var(--border));
+      background: color-mix(in srgb, var(--zone) 6%, var(--section));
+    }
+    /* Section headers stick under the top bar, so mid-scroll you always
+       see which section you're in. --top-h is set from the bar's height. */
+    .section-head {
+      position: sticky; top: var(--top-h, 180px); z-index: 3;
+      background: var(--section); border-radius: 11px 11px 0 0;
+      box-shadow: inset 4px 0 0 var(--zone), 0 1px 0 var(--border);
+    }
+    .section.focus .section-head, .section.suggest .section-head, .section.upnext .section-head {
+      background: color-mix(in srgb, var(--zone) 24%, var(--card));
+    }
+    .section.focus .section-name, .section.suggest .section-name, .section.upnext .section-name { font-size: 16px; }
+    .grp {
+      margin: 8px; border: 1px solid var(--border); border-radius: 10px;
+      overflow: hidden; background: var(--card);
+    }
+    .grp > .sub { border-top: 0; background: var(--soft); color: var(--text); }
+    .grp > .sub:first-child { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--zone) 60%, var(--border)); }
+    .section > .ex, .section > .pick-row { border-top: 1px solid var(--border); }
     .empty.small { padding: 14px 12px; font-size: 13px; text-align: left; }
     .zone {
-      display: flex; align-items: center; gap: 10px; margin-top: 10px;
-      font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+      display: flex; align-items: center; gap: 10px; margin-top: 14px;
+      font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text);
     }
-    .zone::before, .zone::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .zone::before, .zone::after { content: ''; flex: 1; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--z-today) 45%, var(--border)); }
     .zone::before { flex: 0 0 12px; }
     .sort-toggle { display: flex; gap: 2px; padding: 2px; background: var(--soft); border-radius: 8px; order: 3; }
     .zone::after { order: 2; }
@@ -288,7 +320,6 @@
 
     /* Suggested — today: picked from rested body areas. */
     .section.suggest .section-head { cursor: pointer; font-weight: 700; }
-    .section.suggest .sug-sub { margin-top: 6px; }
     .sug-sub { font-weight: 700; }
     .rest-line .jump {
       margin: 2px 4px 2px 0; padding: 2px 9px; font-size: 12px;
@@ -330,7 +361,7 @@
 
     /* ---------- Picking (Suggested → Today / Up next) ---------- */
     .pick { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
-    .pick-cb { width: 20px; height: 20px; margin: 0; flex: 0 0 auto; accent-color: var(--text); }
+    .pick-cb { width: 20px; height: 20px; margin: 0; flex: 0 0 auto; accent-color: var(--z-today); opacity: 0.85; }
     .pick .pick-cb { margin-top: 1px; }
     .ex.sel { box-shadow: inset 0 0 0 2px var(--text); }
     .pick-row {
@@ -356,8 +387,6 @@
     .hint-line { font-style: italic; }
     .sub.pt-head { color: var(--text); }
     .tag.later { outline: 1px dashed var(--muted); }
-    .section.upnext { border: 1.5px dashed var(--muted); }
-    .section.upnext .section-head { background: var(--soft); }
     .next-row { cursor: default; }
     #pick-bar {
       position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 8;
@@ -469,7 +498,7 @@
     /* PT cards: met ones get a check and step back so what's left stands out. */
     .ex.met .ex-name::before { content: '✓ '; color: hsl(130 45% 40%); }
     .ex.met:not(.done) { opacity: 0.7; }
-    .ex { scroll-margin-top: 150px; }
+    .ex { scroll-margin-top: calc(var(--top-h, 180px) + 56px); }
     .ex.flash { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: inset 0 0 0 2px var(--text); } to { box-shadow: inset 0 0 0 2px transparent; } }
   </style>
@@ -1037,6 +1066,26 @@
       savePicks(movePicks(keys, to), (to === 'today' ? 'Added to today: ' : 'Up next: ') + keys.length);
     });
 
+    // Wraps each .sub and the rows after it into a boxed .grp, so blocks
+    // (PT, each area, each muscle group, To do / Done) read as separate.
+    // A .rest-line or .empty between blocks ends the current box.
+    function boxGroups(secEl) {
+      let grp = null;
+      [...secEl.children].forEach(n => {
+        if (n.classList.contains('section-head')) return;
+        if (n.classList.contains('sub')) {
+          grp = el('div', 'grp');
+          secEl.insertBefore(grp, n);
+          grp.append(n);
+        } else if (grp && (n.classList.contains('ex') || n.classList.contains('pick-row') || n.classList.contains('empty'))) {
+          grp.append(n);
+        } else {
+          grp = null;
+        }
+      });
+      return secEl;
+    }
+
     function suggestSection(sections) {
       const sug = suggestedExercises(sections);
       const secEl = el('section', 'section wide suggest');
@@ -1091,7 +1140,7 @@
       if (!items.length) {
         secEl.append(el('p', 'empty', 'Nothing to suggest — every area is resting and this week\'s PT is done.'));
       }
-      return secEl;
+      return boxGroups(secEl);
     }
 
     // Up next: picked for a later session. Move to today, or remove.
@@ -1341,6 +1390,7 @@
         wrap.append(zone);
       }
       sections.forEach(sec => wrap.append(sectionEl(sec)));
+      setTopHeight();
     }
 
     function sectionEl(sec) {
@@ -1371,11 +1421,11 @@
           // Today: what's left, then what's done — done items stay as a record.
           const todo = exercises.filter(ex => !isDoneToday(ex));
           const done = exercises.filter(isDoneToday);
-          if (done.length) {
+          if (exercises.length) {
             const s1 = el('div', 'sub');
             s1.append(el('span', '', 'To do'), el('span', '', String(todo.length)));
             secEl.append(s1);
-            if (!todo.length) secEl.append(el('p', 'empty small', 'All done — nice.'));
+            if (!todo.length) secEl.append(el('p', 'empty small', done.length ? 'All done — nice.' : ''));
           }
           todo.forEach(ex => secEl.append(exerciseCard(ex, true)));
           if (done.length) {
@@ -1388,7 +1438,7 @@
           exercises.forEach(ex => secEl.append(exerciseCard(ex, true)));
         }
         if (!exercises.length && sec.emptyText) secEl.append(el('p', 'empty small', sec.emptyText));
-        return secEl;
+        return boxGroups(secEl);
       }
     }
 
@@ -1399,6 +1449,11 @@
     }
 
     // Top buttons jump to a zone, below the sticky header.
+    function setTopHeight() {
+      document.documentElement.style.setProperty('--top-h', document.querySelector('.top').offsetHeight + 'px');
+    }
+    window.addEventListener('resize', setTopHeight);
+
     function scrollToZone(id) {
       const target = document.getElementById(id);
       if (!target) return;
