@@ -63,6 +63,48 @@ function saveAreaDays(days) {
   return getTrackerData();
 }
 
+// Exercises Julius picked in the app: "today" (joins the Focus table, today
+// only) and "next" (Up next list, kept until done). Stored in user properties
+// under PICKS_KEY — never in the sheet. Item = { row, name, added: 'YYYY-MM-DD' }.
+const PICKS_KEY = 'picks';
+const PICKS_MAX = 30;
+
+function cleanPickList(list) {
+  return (Array.isArray(list) ? list : []).slice(0, PICKS_MAX).map(it => ({
+    row: Number(it && it.row) || 0,
+    name: String((it && it.name) || '').slice(0, 200),
+    added: /^\d{4}-\d{2}-\d{2}$/.test(String(it && it.added)) ? String(it.added) : '',
+  })).filter(it => it.name);
+}
+
+function cleanPicks(p) {
+  p = p || {};
+  const t = p.today || {};
+  return {
+    today: { date: /^\d{4}-\d{2}-\d{2}$/.test(String(t.date)) ? String(t.date) : '', items: cleanPickList(t.items) },
+    next: cleanPickList(p.next),
+  };
+}
+
+function loadPicks() {
+  try {
+    return cleanPicks(JSON.parse(PropertiesService.getUserProperties().getProperty(PICKS_KEY) || '{}'));
+  } catch (e) {
+    return cleanPicks(null);
+  }
+}
+
+// What the UI sees: today's picks only on their date; Up next as stored.
+function picksFor(p, today) {
+  return { today: p.today.date === today ? p.today.items : [], next: p.next };
+}
+
+// Called by the UI with the whole picks object { today: { date, items }, next }.
+function savePicks(picks) {
+  PropertiesService.getUserProperties().setProperty(PICKS_KEY, JSON.stringify(cleanPicks(picks)));
+  return getTrackerData();
+}
+
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Exercise Tracker')
@@ -78,6 +120,7 @@ function getSheetData() {
 function getTrackerData() {
   const result = parseRows(getSheetData(), new Date(), loadAreaDays());
   result.plan = planFor(typeof TODAY_PLAN === 'undefined' ? null : TODAY_PLAN, result.today);
+  result.picks = picksFor(loadPicks(), result.today);
   return result;
 }
 
@@ -335,5 +378,5 @@ function removeNote(i, text) {
 
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom };
+  module.exports = { parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor };
 }

@@ -46,7 +46,8 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 2. Heat-map UI: red = just trained ("hot"), cooling through orange/yellow to green = recovered and ready. Recovery times per muscle group are still to be decided — keep them in one config object.
 3. "Today's plan" (built 2026-10-23): Claude proposes a day's plan as a table, Julius confirms, then Claude writes it into `plan.js` and pushes; it shows under the "Today's plan" button. See Plans below.
 4. Suggested exercises — built and shipped 2026-10-25 (see below).
-5. Editable recovery days — shipped 2026-10-25 (see below). Next: let Julius tweak picks.
+5. Editable recovery days — shipped 2026-10-25 (see below).
+6. Suggested by area + Today / Up next picks — shipped 2026-10-25 (see below).
 
 ## Suggested exercises (built 2026-10-25)
 
@@ -71,11 +72,21 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - Items logged today drop to the bottom of Suggested and dim, like the Focus table.
 - Test with the real sheet CSV via jsdom (export via the Drive connector `download_file_content` with `text/csv`), then ship.
 
-## Suggested — split by category (2026-10-25, later the same day)
+## Suggested — by area, longest since first (2026-10-25, replaces the category split)
 
-- Julius uses Suggested most of the time, so it's open by default (even with a plan) with a solid accent border. Three subheads in priority order: **PT → Compound → Isolation** (the only three categories; the sheet's Abs section counts as Isolation via `categoryOf()`).
-- PT: every PT exercise short of its weekly goal is either suggested (area ready + not done yesterday, `byNeglect` order, max 6) or listed under it as `Also due this week: <name> — <why>` (area resting until X / rest day / next up), so no PT gets lost. Compound (max 3) then Isolation (max 3): one per ready area not already covered by a pick above, from that area's most neglected group.
-- `Longest since` areas and the due-this-week items are tappable chips: an area jumps to its suggested card (else its first Category card, `jumpToArea()`), a due PT item jumps to its Category card (`jumpTo()`). Cards carry `data-area`.
+- Julius uses Suggested most of the time; open by default with a solid accent border. A hint line says "Tick the ones you want, then Do today or Up next."
+- `suggestedExercises()` returns `blocks`: the top `SUGGEST_AREAS` (3) **ready** areas, most days since trained first, each as a subhead `1. Arms · 80d since`. Each block holds the area's open PT (up to `SUGGEST_PT_PER_AREA` = 3, area ready + not done yesterday), then the best Compound and best Isolation (one each), ordered PT → Compound → Isolation (`CAT_ORDER`). Within an area, `byNeglect` = most neglected muscle group (column A), then longest gap. Areas with nothing to pick are skipped.
+- Every other PT still short of its weekly goal is listed under **Other PT due this week** as compact rows with a reason (`Glutes/Hips · 3d`, `resting until Tue`, `rest day`), so no PT gets lost.
+- Open = full cards with a checkbox before the name; collapsed = compact one-line `pick-row`s (checkbox · name · `Compound · UpBack 38d`). Both are selectable.
+- The old "Longest since" chip line and `jumpToArea()` were removed (the area subheads show it).
+
+## Picks: Today / Up next (2026-10-25)
+
+- Ticking items fills `picked` (Set of exercise keys, tap order) and shows a fixed bottom `#pick-bar`: `N selected · Do today · Up next · ✕`.
+- Saved via `savePicks(picks)` in **user properties** (key `picks`, JSON `{ today: { date, items }, next: [] }`, item `{ row, name, added }`, max 30 each, cleaned by `cleanPicks()`). `getTrackerData()` returns `picks` via `picksFor()` — today's picks only on their date.
+- Today's picks join plan.js items in the Focus table (`plannedExercises()`, tag `Picked`, buttons `Later` → Up next and `✕` remove). Picked/planned exercises drop out of Suggested.
+- Up next: a dashed section pinned under Focus (`upNextSection()`), rows with `Today` and `✕`; tapping the name jumps to its card. An item drops off once logged on a day after it was added (`upNextExercises()`); logged today it shows dimmed. Suggested cards/rows for Up next items get an `up next` tag.
+- Moving an exercise to one list removes it from the other (`movePicks()`). Claude can't read these from its workspace.
 
 ## Editable recovery days (2026-10-25)
 

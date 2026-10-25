@@ -270,7 +270,6 @@
     /* Suggested — today: picked from rested body areas. */
     .section.suggest { border: 2px solid var(--accent); }
     .section.suggest .section-head { background: color-mix(in srgb, var(--accent) 18%, var(--card)); cursor: pointer; font-weight: 700; }
-    .section.suggest.collapsed .sug-sub, .section.suggest.collapsed .rest-edit { display: none; }
     .sug-sub { font-weight: 700; }
     .rest-line .jump {
       margin: 2px 4px 2px 0; padding: 2px 9px; font-size: 12px;
@@ -278,7 +277,6 @@
       background: var(--card); color: var(--text); text-align: left;
     }
     .pt-due .jump { border-color: hsl(40 60% 55%); }
-    .section.suggest.collapsed .ex, .section.suggest.collapsed .rest-line { display: none; }
     .section.suggest .chev { font-size: 11px; color: var(--muted); margin-left: 6px; }
     .rest-line {
       padding: 6px 12px; font-size: 12px; color: var(--muted);
@@ -311,6 +309,53 @@
     .rest-row.changed .rest-val { color: var(--accent); }
     .rest-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
     .rest-actions .rest-msg { font-size: 12px; color: var(--muted); }
+
+    /* ---------- Picking (Suggested → Today / Up next) ---------- */
+    .pick { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+    .pick-cb { width: 20px; height: 20px; margin: 0; flex: 0 0 auto; accent-color: var(--text); }
+    .pick .pick-cb { margin-top: 1px; }
+    .ex.sel { box-shadow: inset 0 0 0 2px var(--text); }
+    .pick-row {
+      --accent: hsl(var(--hue) var(--heat-sat) var(--heat-light));
+      display: flex; align-items: center; gap: 10px;
+      min-height: 44px; padding: 6px 12px 6px 10px;
+      border-top: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      background: color-mix(in srgb, var(--accent) var(--tint), var(--card));
+      font-size: 14px; cursor: pointer;
+    }
+    .pick-row.sel { background: color-mix(in srgb, var(--text) 10%, var(--card)); }
+    .pick-row.done { opacity: 0.55; }
+    .pick-row .pr-name { flex: 1; font-weight: 600; min-width: 0; text-align: left; }
+    .pick-row .pr-meta { font-size: 12px; color: var(--muted); text-align: right; }
+    .pr-name.link { border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; padding: 0; }
+    .mini {
+      padding: 2px 9px; font-size: 12px; margin-left: 2px;
+      border: 1px solid var(--border); border-radius: 999px;
+      background: var(--card); color: var(--text);
+    }
+    .ex-meta .mini { margin: 2px 4px 0 0; }
+    .hint-line { font-style: italic; }
+    .section.upnext { border: 1.5px dashed var(--muted); }
+    .section.upnext .section-head { background: var(--soft); }
+    .next-row { cursor: default; }
+    #pick-bar {
+      position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 8;
+      display: flex; align-items: center; gap: 8px;
+      width: min(616px, calc(100vw - 24px));
+      padding: 8px 10px; border-radius: 12px;
+      background: var(--text); color: var(--bg);
+      box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+    }
+    #pick-bar[hidden] { display: none; }
+    #pick-bar .pb-count { flex: 1; font-size: 14px; font-weight: 600; }
+    #pick-bar button {
+      height: 38px; padding: 0 12px; font-size: 14px; font-weight: 600;
+      border: 1px solid color-mix(in srgb, var(--bg) 40%, transparent); border-radius: 8px;
+      background: transparent; color: var(--bg);
+    }
+    #pick-bar button.primary { background: var(--bg); color: var(--text); }
+    body.picking { padding-bottom: 80px; }
 
     .empty { color: var(--muted); text-align: center; padding: 24px 0; grid-column: 1 / -1; }
 
@@ -431,6 +476,13 @@
   </div>
 
   <div id="groups"></div>
+
+  <div id="pick-bar" hidden>
+    <span class="pb-count">0 selected</span>
+    <button type="button" data-to="today" class="primary">Do today</button>
+    <button type="button" data-to="next">Up next</button>
+    <button type="button" data-to="clear" title="Clear selection">✕</button>
+  </div>
 
   <div id="notes-shade"></div>
   <aside id="notes-panel" aria-label="App notes">
@@ -720,13 +772,34 @@
 
     // Plan from plan.js, matched by row (falls back to name if rows moved).
     // Keeps plan order, but anything already logged today moves to the end.
+    // Exercise for a stored { row, name } reference (plan item or pick).
+    function findEx(all, p) {
+      return all.find(e => e.slots.some(s => s.row === p.row && s.name === p.name))
+        || all.find(e => e.slots.some(s => s.name === p.name));
+    }
+
+    // Today's picks (chosen in Suggested) join the plan from plan.js.
+    function todayPicks() { return (data.picks && data.picks.today) || []; }
+
+    // Up next: kept until logged on a day after it was added (logged today →
+    // still shown, dimmed, so it doesn't vanish mid-session).
+    function upNextExercises(all) {
+      const seen = new Set();
+      return ((data.picks && data.picks.next) || []).map(p => {
+        const ex = findEx(all, p);
+        if (!ex || seen.has(ex.key)) return null;
+        seen.add(ex.key);
+        const doneSince = ex.slots.some(s => !s.noDate && p.added && s.lastDate >= p.added && s.lastDate < data.today);
+        return doneSince ? null : Object.assign({}, ex, { pickRef: p });
+      }).filter(Boolean);
+    }
+
     function plannedExercises(sections) {
       const all = [].concat(...sections.map(s => s.exercises));
       const seen = new Set();
       const planned = [];
-      (data.plan || []).forEach(p => {
-        const ex = all.find(e => e.slots.some(s => s.row === p.row && s.name === p.name))
-          || all.find(e => e.slots.some(s => s.name === p.name));
+      (data.plan || []).concat(todayPicks().map(p => Object.assign({ picked: true }, p))).forEach(p => {
+        const ex = findEx(all, p);
         if (!ex || seen.has(ex.key)) return;
         seen.add(ex.key);
         planned.push(Object.assign({}, ex, { plan: p }));
@@ -738,9 +811,6 @@
     // Picked "as of this morning": logs dated today are ignored for readiness,
     // so the list doesn't reshuffle as he logs. Done-today items sink and dim.
     // Priority: PT > Compound > Isolation (the sheet's Abs live in Isolation).
-    const SUGGEST_PT_MAX = 6;
-    const SUGGEST_COMPOUND_MAX = 3;
-    const SUGGEST_ISO_MAX = 3;
     const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     // Real days since this exercise before today, or null if never dated (a row
@@ -783,6 +853,16 @@
       return out;
     }
 
+    // Suggested, by body area: the ready areas that have gone longest without
+    // training come first (Push 13d, Legs 10d, …). Each area block gets its PT
+    // (up to SUGGEST_PT_PER_AREA), then one Compound and one Isolation, from
+    // the area's most neglected muscle group. Only the top SUGGEST_AREAS areas
+    // get a block; PT still due anywhere else is listed under them so no PT
+    // gets lost.
+    const SUGGEST_AREAS = 3;
+    const SUGGEST_PT_PER_AREA = 3;
+    const CAT_ORDER = { PT: 0, Compound: 1, Isolation: 2 };
+
     function suggestedExercises(sections) {
       const all = [].concat(...sections.map(s => s.exercises));
       const areas = areaStatus(all);
@@ -790,67 +870,51 @@
       const inPlan = new Set(plannedExercises(sections).map(ex => ex.key));
       const ready = ex => areas[ex.area] && areas[ex.area].ready;
       const gap = ex => daysBeforeToday(ex);
-      const areaGap = ex => effectiveDays(areas[ex.area].since);
       const groupGap = ex => effectiveDays(groups[ex.group].since);
-      // Direction: the most neglected body area first, then the most neglected
-      // muscle group in it, then the exercise with the longest gap.
-      const byNeglect = (a, b) => areaGap(b) - areaGap(a) || groupGap(b) - groupGap(a)
-        || gap(b) - gap(a) || a.firstRow - b.firstRow;
+      // Within an area: most neglected muscle group, then longest gap.
+      const byNeglect = (a, b) => groupGap(b) - groupGap(a) || gap(b) - gap(a) || a.firstRow - b.firstRow;
       const tag = ex => Object.assign({}, ex, { suggest: areas[ex.area], suggestGroup: groups[ex.group] });
+      const byCat = (a, b) => CAT_ORDER[a.category] - CAT_ORDER[b.category];
       const doneLast = list => list.filter(ex => !isDoneToday(ex)).concat(list.filter(isDoneToday));
 
-      // 1. PT: every PT exercise still short of its weekly goal (as of this
-      //    morning). Suggested when its area is ready and it wasn't done
-      //    yesterday (PT needs a rest day); the rest are listed as still due.
+      // PT still short of its weekly goal (as of this morning). OK to suggest
+      // when its area is ready and it wasn't done yesterday (PT rest day).
       const ptOpen = all.filter(ex => ex.category === 'PT' && !inPlan.has(ex.key)
-        && ex.weekDone - ex.slots.filter(slotToday).length < ex.weekTarget).sort(byNeglect);
+        && ex.weekDone - ex.slots.filter(slotToday).length < ex.weekTarget);
       const restDay = ex => ex.slots.some(s => !s.noDate && s.days === 1);
-      const ptOk = ptOpen.filter(ex => ready(ex) && !restDay(ex));
-      const pt = ptOk.slice(0, SUGGEST_PT_MAX);
-      const ptDue = ptOpen.filter(ex => !pt.includes(ex)).map(ex => Object.assign({}, ex, {
-        why: !ready(ex) ? ex.area + ' resting until ' + areas[ex.area].until
-          : restDay(ex) ? 'rest day (done yesterday)' : 'next up',
-      }));
+      const ptOk = ex => ready(ex) && !restDay(ex);
 
-      // 2–3. Compound, then Isolation: one exercise per ready area not already
-      //      covered above, from that area's most neglected group.
-      const covered = new Set(pt.map(ex => ex.area));
-      function onePerArea(category, max) {
-        const best = {};
-        all.filter(ex => ex.category === category && !inPlan.has(ex.key) && ready(ex) && !covered.has(ex.area))
-          .forEach(ex => { if (!best[ex.area] || byNeglect(ex, best[ex.area]) < 0) best[ex.area] = ex; });
-        const picks = Object.values(best).sort(byNeglect).slice(0, max);
-        picks.forEach(ex => covered.add(ex.area));
-        return picks;
+      const readyAreas = Object.values(areas).filter(a => a.ready)
+        .sort((a, b) => effectiveDays(b.since) - effectiveDays(a.since) || a.name.localeCompare(b.name));
+      const blocks = [];
+      for (const a of readyAreas) {
+        if (blocks.length >= SUGGEST_AREAS) break;
+        const here = all.filter(ex => ex.area === a.name && !inPlan.has(ex.key));
+        const pt = ptOpen.filter(ex => ex.area === a.name && ptOk(ex)).sort(byNeglect).slice(0, SUGGEST_PT_PER_AREA);
+        const best = cat => here.filter(ex => ex.category === cat).sort(byNeglect)[0];
+        const items = pt.concat([best('Compound'), best('Isolation')].filter(Boolean));
+        if (!items.length) continue;
+        blocks.push({ area: a, items: doneLast(items.sort(byCat).map(tag)) });
       }
-      const compound = onePerArea('Compound', SUGGEST_COMPOUND_MAX);
-      const isolation = onePerArea('Isolation', SUGGEST_ISO_MAX);
+
+      const shown = new Set([].concat(...blocks.map(b => b.items.map(ex => ex.key))));
+      const ptDue = ptOpen.filter(ex => !shown.has(ex.key))
+        .sort((a, b) => ptOk(b) - ptOk(a) || effectiveDays(areas[b.area].since) - effectiveDays(areas[a.area].since) || byNeglect(a, b))
+        .map(ex => Object.assign(tag(ex), {
+          why: !ready(ex) ? ex.area + ' resting until ' + areas[ex.area].until
+            : restDay(ex) ? 'rest day (done yesterday)'
+            : ex.area + ' · ' + (areas[ex.area].since == null ? 'no log' : areas[ex.area].since + 'd'),
+        }));
 
       return {
-        parts: [
-          { name: 'PT', items: doneLast(pt.map(tag)), due: ptDue },
-          { name: 'Compound', items: doneLast(compound.map(tag)) },
-          { name: 'Isolation', items: doneLast(isolation.map(tag)) },
-        ],
+        blocks,
+        due: ptDue,
         resting: Object.values(areas).filter(a => !a.ready),
-        // Ready areas, longest since trained first — the "direction" line.
-        neglected: Object.values(areas).filter(a => a.ready)
-          .sort((a, b) => effectiveDays(b.since) - effectiveDays(a.since)).slice(0, 3),
         unmapped: [...new Set(all.filter(ex => ex.area === 'Other').map(ex => ex.group))],
       };
     }
 
     let suggestOpen = true;
-
-    // Tapping an area in "Longest since": its first suggested card, else its
-    // first card in the Category view.
-    function jumpToArea(area) {
-      const sug = [...document.querySelectorAll('.section.suggest .ex')].find(c => c.dataset.area === area);
-      if (sug) return flashCard(sug);
-      if (sortMode !== 'category') setMode('category');
-      const card = [...document.querySelectorAll('.section:not(.focus):not(.suggest) .ex')].find(c => c.dataset.area === area);
-      if (card) flashCard(card);
-    }
 
     function linkChip(text, onClick) {
       const b = el('button', 'jump', text);
@@ -859,7 +923,95 @@
       return b;
     }
 
-    function suggestSection(sections, hasPlan) {
+    // ---------- Picking: tap several, then "Do today" or "Up next" ----------
+    const picked = new Set(); // exercise keys, in the order tapped
+    let exByKey = {};
+
+    function pickBox(ex) {
+      const cb = el('input', 'pick-cb');
+      cb.type = 'checkbox';
+      cb.dataset.key = ex.key;
+      cb.checked = picked.has(ex.key);
+      cb.setAttribute('aria-label', 'Select ' + ex.name);
+      cb.addEventListener('click', e => e.stopPropagation());
+      cb.addEventListener('change', () => togglePick(ex.key, cb.checked));
+      return cb;
+    }
+
+    function togglePick(key, on) {
+      if (on) picked.add(key); else picked.delete(key);
+      document.querySelectorAll('input.pick-cb').forEach(cb => { if (cb.dataset.key === key) cb.checked = on; });
+      document.querySelectorAll('.pick-row, .ex').forEach(n => { if (n.dataset.key === key && n.closest('.suggest')) n.classList.toggle('sel', on); });
+      renderPickBar();
+    }
+
+    // Compact one-line row: checkbox · name · why. Tapping anywhere toggles it.
+    function pickRow(ex, metaText) {
+      const row = el('label', 'pick-row' + (isDoneToday(ex) ? ' done' : '') + (picked.has(ex.key) ? ' sel' : ''));
+      row.dataset.key = ex.key;
+      row.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
+      row.append(pickBox(ex), el('span', 'pr-name', (isDoneToday(ex) ? '✓ ' : '') + ex.name), el('span', 'pr-meta', metaText));
+      return row;
+    }
+
+    function pickMeta(ex) {
+      const g = ex.suggestGroup;
+      const parts = [ex.category];
+      if (g && g.name !== ex.area) parts.push(g.name + ' ' + (g.since == null ? 'no log' : g.since + 'd'));
+      if (upNextKeys.has(ex.key)) parts.push('up next');
+      return parts.join(' · ');
+    }
+
+    let upNextKeys = new Set();
+
+    // Current picks as stored, ready to edit and send back.
+    function currentPicks() {
+      return {
+        today: { date: data.today, items: todayPicks().slice() },
+        next: ((data.picks && data.picks.next) || []).slice(),
+      };
+    }
+
+    function savePicks(p, msg) {
+      setStatus('Saving…');
+      google.script.run
+        .withSuccessHandler(result => { data = result; picked.clear(); render(); setStatus(msg); })
+        .withFailureHandler(err => setStatus('Error: ' + err.message))
+        .savePicks(p);
+    }
+
+    const pickRef = ex => ({ row: ex.slots[0].row, name: ex.slots[0].name, added: data.today });
+
+    // Removes these exercises from both lists, then (optionally) adds to one.
+    function movePicks(keys, to) {
+      const all = Object.values(exByKey);
+      const p = currentPicks();
+      const keyOf = it => (findEx(all, it) || {}).key;
+      p.today.items = p.today.items.filter(it => !keys.includes(keyOf(it)));
+      p.next = p.next.filter(it => !keys.includes(keyOf(it)));
+      const refs = keys.map(k => exByKey[k]).filter(Boolean).map(pickRef);
+      if (to === 'today') p.today.items = p.today.items.concat(refs);
+      if (to === 'next') p.next = p.next.concat(refs);
+      return p;
+    }
+
+    function renderPickBar() {
+      const bar = document.getElementById('pick-bar');
+      const n = picked.size;
+      document.body.classList.toggle('picking', n > 0);
+      bar.hidden = n === 0;
+      bar.querySelector('.pb-count').textContent = n + ' selected';
+    }
+
+    document.getElementById('pick-bar').addEventListener('click', e => {
+      const to = e.target.dataset && e.target.dataset.to;
+      if (!to) return;
+      const keys = [...picked];
+      if (to === 'clear') { [...keys].forEach(k => togglePick(k, false)); return; }
+      savePicks(movePicks(keys, to), (to === 'today' ? 'Added to today: ' : 'Up next: ') + keys.length);
+    });
+
+    function suggestSection(sections) {
       const sug = suggestedExercises(sections);
       const secEl = el('section', 'section wide suggest');
       const open = suggestOpen;
@@ -867,46 +1019,69 @@
       const head = el('div', 'section-head');
       const name = el('span', 'section-name', 'Suggested — today');
       name.append(el('span', 'chev', open ? '▾' : '▸'));
-      const items = [].concat(...sug.parts.map(p => p.items));
+      const items = [].concat(...sug.blocks.map(b => b.items));
       const done = items.filter(isDoneToday).length;
       head.append(name, el('span', 'section-count', items.length ? done + ' / ' + items.length + ' done' : ''));
       head.addEventListener('click', () => { suggestOpen = !open; render(); });
       secEl.append(head);
+      secEl.append(el('div', 'rest-line hint-line', 'Tick the ones you want, then Do today or Up next.'));
 
-      const sinceText = a => a.since == null ? 'no log' : a.since + 'd';
-      if (sug.neglected.length) {
-        const due = el('div', 'rest-line due-line');
-        due.append(el('b', '', 'Longest since: '));
-        sug.neglected.forEach(a => due.append(linkChip(a.name + ' ' + sinceText(a), () => jumpToArea(a.name))));
-        secEl.append(due);
+      if (open) {
+        const restParts = sug.resting.map(a => a.name + ' (until ' + a.until + ')');
+        const rest = el('div', 'rest-line', restParts.length ? 'Resting: ' + restParts.join(' · ') : 'Everything is rested.');
+        if (sug.unmapped.length) rest.append(el('span', 'unmapped', ' · Unmapped: ' + sug.unmapped.join(', ')));
+        const editBtn = el('button', 'rest-edit-btn', restEditOpen ? 'Done' : 'Rest days ✎');
+        editBtn.type = 'button';
+        editBtn.addEventListener('click', () => { restEditOpen = !restEditOpen; restDraft = null; render(); });
+        rest.append(editBtn);
+        secEl.append(rest);
+        if (restEditOpen) secEl.append(restEditor());
       }
-      const restParts = sug.resting.map(a => a.name + ' (until ' + a.until + ')');
-      const rest = el('div', 'rest-line', restParts.length ? 'Resting: ' + restParts.join(' · ') : 'Everything is rested.');
-      if (sug.unmapped.length) rest.append(el('span', 'unmapped', ' · Unmapped: ' + sug.unmapped.join(', ')));
-      const editBtn = el('button', 'rest-edit-btn', restEditOpen ? 'Done' : 'Rest days ✎');
-      editBtn.type = 'button';
-      editBtn.addEventListener('click', () => { restEditOpen = !restEditOpen; restDraft = null; render(); });
-      rest.append(editBtn);
-      secEl.append(rest);
-      if (restEditOpen) secEl.append(restEditor());
 
-      sug.parts.forEach(part => {
-        if (!part.items.length && !(part.due && part.due.length)) return;
-        const sub = el('div', 'sub sug-sub');
-        sub.append(el('span', '', part.name),
-          el('span', '', part.items.filter(isDoneToday).length + ' / ' + part.items.length + ' done'));
+      // One block per area, longest since trained first.
+      sug.blocks.forEach((b, i) => {
+        const a = b.area;
+        const sub = el('div', 'sub sug-sub area-head');
+        sub.append(el('span', '', (i + 1) + '. ' + a.name + ' · ' + (a.since == null ? 'no log' : a.since + 'd since')),
+          el('span', '', b.items.filter(isDoneToday).length + ' / ' + b.items.length + ' done'));
         secEl.append(sub);
-        part.items.forEach(ex => secEl.append(exerciseCard(ex, false)));
-        if (part.due && part.due.length) {
-          const line = el('div', 'rest-line pt-due');
-          line.append(el('b', '', part.items.length ? 'Also due this week: ' : 'PT due this week: '));
-          part.due.forEach(ex => line.append(linkChip(ex.name + ' — ' + ex.why, () => jumpTo(ex.key))));
-          secEl.append(line);
-        }
+        b.items.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true) : pickRow(ex, pickMeta(ex))));
       });
-      if (!items.length && !sug.parts[0].due.length) {
+
+      if (sug.due.length) {
+        const sub = el('div', 'sub sug-sub');
+        sub.append(el('span', '', sug.blocks.length ? 'Other PT due this week' : 'PT due this week'), el('span', '', String(sug.due.length)));
+        secEl.append(sub);
+        sug.due.forEach(ex => secEl.append(pickRow(ex, ex.why)));
+      }
+      if (!items.length && !sug.due.length) {
         secEl.append(el('p', 'empty', 'Nothing to suggest — every area is resting and this week\'s PT is done.'));
       }
+      return secEl;
+    }
+
+    // Up next: picked for a later session. Move to today, or remove.
+    function upNextSection(list) {
+      const secEl = el('section', 'section wide upnext');
+      const head = el('div', 'section-head');
+      head.append(el('span', 'section-name', 'Up next'), el('span', 'section-count', String(list.length)));
+      secEl.append(head);
+      list.forEach(ex => {
+        const row = el('div', 'pick-row next-row' + (isDoneToday(ex) ? ' done' : ''));
+        row.dataset.key = ex.key;
+        row.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
+        const nm = el('button', 'pr-name link', (isDoneToday(ex) ? '✓ ' : '') + ex.name);
+        nm.type = 'button';
+        nm.addEventListener('click', () => jumpTo(ex.key));
+        const toToday = el('button', 'mini', 'Today');
+        const del = el('button', 'mini', '✕');
+        toToday.type = del.type = 'button';
+        del.title = 'Remove from Up next';
+        toToday.addEventListener('click', () => savePicks(movePicks([ex.key], 'today'), 'Moved to today: ' + ex.name));
+        del.addEventListener('click', () => savePicks(movePicks([ex.key], null), 'Removed: ' + ex.name));
+        row.append(nm, el('span', 'pr-meta', ex.category + ' · ' + (ex.noDate ? 'no date' : daysLabel(ex.days))), toToday, del);
+        secEl.append(row);
+      });
       return secEl;
     }
 
@@ -963,14 +1138,19 @@
       document.getElementById('status').textContent = text;
     }
 
-    function exerciseCard(ex, showTags) {
+    function exerciseCard(ex, showTags, pickable) {
       const card = el('div', 'ex' + ((ex.plan || ex.suggest) && isDoneToday(ex) ? ' done' : '')
-        + (ex.category === 'PT' && ex.met ? ' met' : ''));
+        + (ex.category === 'PT' && ex.met ? ' met' : '') + (pickable && picked.has(ex.key) ? ' sel' : ''));
       card.dataset.key = ex.key;
       card.dataset.area = ex.area || '';
       card.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
-      card.append(el('div', 'ex-name', ex.name),
-        el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days)));
+      const nameEl = el('div', 'ex-name');
+      if (pickable) {
+        const lab = el('label', 'pick');
+        lab.append(pickBox(ex), document.createTextNode(ex.name));
+        nameEl.append(lab);
+      } else nameEl.textContent = ex.name;
+      card.append(nameEl, el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days)));
 
       const meta = el('div', 'ex-meta');
       if (ex.suggest) {
@@ -982,12 +1162,23 @@
           meta.append(el('span', 'tag', g.name + ' · ' + (g.since == null ? 'no log' : g.since + 'd')));
         }
         meta.append(el('span', 'tag', ex.category));
+        if (upNextKeys.has(ex.key)) meta.append(el('span', 'tag', 'Up next'));
       }
       if (showTags) meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
       if (ex.freq) meta.append(el('span', 'tag', ex.freq));
       if (ex.plan) {
         const target = [ex.plan.target, ex.plan.weight].filter(Boolean).join(' @ ');
-        meta.append(el('span', 'tag', isDoneToday(ex) ? '✓ done' : 'Plan' + (target ? ': ' + target : '')));
+        meta.append(el('span', 'tag', isDoneToday(ex) ? '✓ done' : (ex.plan.picked ? 'Picked' : 'Plan') + (target ? ': ' + target : '')));
+        if (ex.plan.picked) {
+          const later = el('button', 'mini', 'Later');
+          const del = el('button', 'mini', '✕');
+          later.type = del.type = 'button';
+          later.title = 'Move to Up next';
+          del.title = 'Remove from today';
+          later.addEventListener('click', () => savePicks(movePicks([ex.key], 'next'), 'Up next: ' + ex.name));
+          del.addEventListener('click', () => savePicks(movePicks([ex.key], null), 'Removed: ' + ex.name));
+          meta.append(later, del);
+        }
       }
       if (meta.childNodes.length) card.append(meta);
       const history = historyLine(ex);
@@ -1068,6 +1259,11 @@
       let sections = buildSections();
       renderPtStrip(sections);
       const all = [].concat(...sections.map(s => s.exercises));
+      exByKey = Object.fromEntries(all.map(ex => [ex.key, ex]));
+      [...picked].forEach(k => { if (!exByKey[k]) picked.delete(k); });
+      const upNext = upNextExercises(all);
+      upNextKeys = new Set(upNext.map(ex => ex.key));
+      renderPickBar();
       if (sortMode === 'days') {
         // One list, most days since first; exercises with no date at the bottom.
         all.sort((a, b) => b.days - a.days || a.noDate - b.noDate || a.firstRow - b.firstRow);
@@ -1088,17 +1284,20 @@
         sections = [{ name: "Today's plan", exercises: planned, wide: true, focus: true }];
       }
 
-      // Focus: today's plan bubbles to the top of the Category and Days views,
-      // then Suggested (collapsed when a confirmed plan exists — the plan wins).
-      let suggestEl = null;
+      // Pinned on Category and Days: Focus (plan + today's picks), Up next,
+      // then Suggested.
       if (sortMode === 'category' || sortMode === 'days') {
         const base = buildSections();
         const planned = plannedExercises(base);
-        if (planned.length) sections.unshift({ name: 'Focus — today', exercises: planned, wide: true, focus: true });
-        suggestEl = suggestSection(base, planned.length > 0);
+        if (planned.length) wrap.append(sectionEl({ name: 'Focus — today', exercises: planned, wide: true, focus: true }));
+        if (upNext.length) wrap.append(upNextSection(upNext));
+        wrap.append(suggestSection(base));
       }
+      sections.forEach(sec => wrap.append(sectionEl(sec)));
+    }
 
-      sections.forEach(sec => {
+    function sectionEl(sec) {
+      {
         const exercises = sec.exercises;
         const countText = sortMode === 'today'
           ? exercises.length + ' done'
@@ -1125,10 +1324,8 @@
         } else {
           exercises.forEach(ex => secEl.append(exerciseCard(ex, true)));
         }
-        wrap.append(secEl);
-        if (sec.focus && suggestEl) { wrap.append(suggestEl); suggestEl = null; }
-      });
-      if (suggestEl) wrap.prepend(suggestEl);
+        return secEl;
+      }
     }
 
     function setMode(mode) {
