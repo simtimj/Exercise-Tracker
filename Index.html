@@ -276,6 +276,8 @@
       padding: 6px 12px; font-size: 12px; color: var(--muted);
       border-top: 1px solid var(--border); line-height: 1.4;
     }
+    .due-line { color: var(--text); }
+    .due-line b { font-weight: 600; }
     .rest-line .unmapped { color: hsl(35 60% 42%); }
     .tag.area { background: color-mix(in srgb, var(--accent) 22%, var(--card)); }
     .tag.other { outline: 1px dashed hsl(35 60% 50%); }
@@ -760,36 +762,58 @@
       return out;
     }
 
+    // Days since anything in a muscle group (column A) was trained, before
+    // today; never-logged groups count as NO_DATE_DAYS.
+    function groupStatus(all) {
+      const out = {};
+      all.forEach(ex => {
+        const d = realDaysBeforeToday(ex);
+        const g = out[ex.group] || (out[ex.group] = { name: ex.group, since: null });
+        if (d != null && (g.since == null || d < g.since)) g.since = d;
+      });
+      return out;
+    }
+
     function suggestedExercises(sections) {
       const all = [].concat(...sections.map(s => s.exercises));
       const areas = areaStatus(all);
+      const groups = groupStatus(all);
       const inPlan = new Set(plannedExercises(sections).map(ex => ex.key));
       const ready = ex => areas[ex.area] && areas[ex.area].ready;
       const gap = ex => daysBeforeToday(ex);
-      const byGap = (a, b) => gap(b) - gap(a) || a.firstRow - b.firstRow;
+      const areaGap = ex => effectiveDays(areas[ex.area].since);
+      const groupGap = ex => effectiveDays(groups[ex.group].since);
+      // Direction: the most neglected body area first, then the most neglected
+      // muscle group in it, then the exercise with the longest gap.
+      const byNeglect = (a, b) => areaGap(b) - areaGap(a) || groupGap(b) - groupGap(a)
+        || gap(b) - gap(a) || a.firstRow - b.firstRow;
 
       // 1. PT: weekly goal not met (as of this morning), not done yesterday
-      //    (PT needs a rest day), area ready. Longest gap first.
+      //    (PT needs a rest day), area ready.
       const pt = all.filter(ex => ex.category === 'PT' && !inPlan.has(ex.key) && ready(ex)
         && ex.weekDone - ex.slots.filter(slotToday).length < ex.weekTarget
         && !ex.slots.some(s => !s.noDate && s.days === 1))
-        .sort(byGap).slice(0, SUGGEST_PT_MAX);
+        .sort(byNeglect).slice(0, SUGGEST_PT_MAX);
 
-      // 2. Bonus: one non-PT exercise per ready area not covered by PT, longest gap.
+      // 2. Bonus: one non-PT exercise per ready area not covered by PT — from
+      //    that area's most neglected group — most neglected areas first.
       const covered = new Set(pt.map(ex => ex.area));
       const bestPerArea = {};
       all.filter(ex => ex.category !== 'PT' && !inPlan.has(ex.key) && ready(ex) && !covered.has(ex.area))
         .forEach(ex => {
           const cur = bestPerArea[ex.area];
-          if (!cur || byGap(ex, cur) < 0) bestPerArea[ex.area] = ex;
+          if (!cur || byNeglect(ex, cur) < 0) bestPerArea[ex.area] = ex;
         });
-      const bonus = Object.values(bestPerArea).sort(byGap).slice(0, SUGGEST_BONUS_MAX);
+      const bonus = Object.values(bestPerArea).sort(byNeglect).slice(0, SUGGEST_BONUS_MAX);
 
       const picks = pt.concat(bonus).slice(0, SUGGEST_MAX)
-        .map(ex => Object.assign({}, ex, { suggest: areas[ex.area] }));
+        .map(ex => Object.assign({}, ex, { suggest: areas[ex.area], suggestGroup: groups[ex.group] }));
       return {
         items: picks.filter(ex => !isDoneToday(ex)).concat(picks.filter(isDoneToday)),
         resting: Object.values(areas).filter(a => !a.ready),
+        // Ready areas, longest since trained first — the "direction" line.
+        neglected: Object.values(areas).filter(a => a.ready)
+          .sort((a, b) => effectiveDays(b.since) - effectiveDays(a.since)).slice(0, 3),
         unmapped: [...new Set(all.filter(ex => ex.area === 'Other').map(ex => ex.group))],
       };
     }
@@ -859,6 +883,12 @@
       secEl.append(head);
 
       const restParts = sug.resting.map(a => a.name + ' (until ' + a.until + ')');
+      const sinceText = a => a.since == null ? 'no log' : a.since + 'd';
+      if (sug.neglected.length) {
+        const due = el('div', 'rest-line due-line');
+        due.append(el('b', '', 'Longest since: '), document.createTextNode(sug.neglected.map(a => a.name + ' ' + sinceText(a)).join(' · ')));
+        secEl.append(due);
+      }
       const rest = el('div', 'rest-line', restParts.length ? 'Resting: ' + restParts.join(' · ') : 'Everything is rested.');
       if (sug.unmapped.length) rest.append(el('span', 'unmapped', ' · Unmapped: ' + sug.unmapped.join(', ')));
       const editBtn = el('button', 'rest-edit-btn', restEditOpen ? 'Done' : 'Rest days ✎');
@@ -889,7 +919,11 @@
       if (ex.suggest) {
         const a = ex.suggest;
         meta.append(el('span', 'tag area' + (a.name === 'Other' ? ' other' : ''),
-          isDoneToday(ex) ? a.name + ' · ✓ done' : a.name + ' · ready ' + (a.since == null ? 'no log' : a.since + 'd')));
+          isDoneToday(ex) ? a.name + ' · ✓ done' : a.name + ' · ' + (a.since == null ? 'no log' : a.since + 'd since')));
+        const g = ex.suggestGroup;
+        if (g && g.name !== a.name && !isDoneToday(ex)) {
+          meta.append(el('span', 'tag', g.name + ' · ' + (g.since == null ? 'no log' : g.since + 'd')));
+        }
         meta.append(el('span', 'tag', ex.category));
       }
       if (showTags) meta.append(el('span', 'tag', ex.category), el('span', 'tag', ex.group));
