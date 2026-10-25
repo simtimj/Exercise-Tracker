@@ -331,6 +331,8 @@
     .seg-bar.all .seg { --fill: hsl(140 55% 42%); }
     .seg-bar.blue .seg { --fill: hsl(210 var(--heat-sat) var(--heat-light)); height: 7px; }
     .wk-days { font-weight: 600; }
+    .pt-count .started { color: hsl(35 60% 42%); }
+    @media (prefers-color-scheme: dark) { .pt-count .started { color: hsl(40 65% 62%); } }
     /* Bonus line: same shape, quieter — optional, not a to-do. */
     .pt-line.bonus { margin-top: 6px; font-weight: 500; color: var(--muted); }
     .pt-chips {
@@ -567,7 +569,7 @@
       weight.placeholder = 'Weight';
       weight.value = (ex.plan && ex.plan.weight) || lastWeight(ex);
       const input = el('input');
-      input.placeholder = 'Sets, e.g. 15,15,15';
+      input.placeholder = '15, 15, 15';
       input.enterKeyHint = 'done';
       input.inputMode = 'text';
       const btn = el('button', '', 'Log');
@@ -726,8 +728,15 @@
       // started but not there yet. Count = full boxes.
       const line = el('div', 'pt-line');
       const bar = segBar(pt.map(ex => Math.min(1, ex.weekDone / ex.weekTarget)), met === pt.length ? 'all' : '');
-      line.append(el('span', 'pt-label', 'PT this week'), bar,
-        el('span', 'pt-count', met === pt.length ? 'all done ✓' : met + ' / ' + pt.length + ' done'));
+      // "0/9 done · 3 started" so the amber half-boxes are explained.
+      const started = pt.filter(ex => !ex.met && ex.weekDone > 0).length;
+      const count = el('span', 'pt-count');
+      if (met === pt.length) count.textContent = 'all done ✓';
+      else {
+        count.append(document.createTextNode(met + '/' + pt.length + ' done'));
+        if (started) count.append(el('span', 'started', ' · ' + started + ' started'));
+      }
+      line.append(el('span', 'pt-label', 'PT this week'), bar, count);
       strip.append(line);
 
       const chips = el('div', 'pt-chips');
