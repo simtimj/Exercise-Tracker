@@ -78,7 +78,7 @@
 
     .controls {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 4px;
       margin-top: 8px;
       padding: 3px;
@@ -276,6 +276,13 @@
     }
     .zone::before, .zone::after { content: ''; flex: 1; height: 1px; background: var(--border); }
     .zone::before { flex: 0 0 12px; }
+    .sort-toggle { display: flex; gap: 2px; padding: 2px; background: var(--soft); border-radius: 8px; order: 3; }
+    .zone::after { order: 2; }
+    .sort-toggle button {
+      padding: 4px 10px; border: 0; border-radius: 6px; background: transparent;
+      color: var(--muted); font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0;
+    }
+    .sort-toggle button.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
     .ex-meta .add-today { margin-left: 0; }
     .ex-meta .add-today:disabled { opacity: 0.6; }
 
@@ -477,8 +484,10 @@
     </header>
 
     <div class="controls">
-      <button data-sort="category" class="active">Category</button>
-      <button data-sort="days">Days</button>
+      <button data-jump="today-sec" class="active">Today</button>
+      <button data-jump="suggest-sec">Suggested</button>
+      <button data-jump="next-sec">Up next</button>
+      <button data-jump="all-sec">All</button>
     </div>
 
     <div id="pt-strip"></div>
@@ -1031,6 +1040,7 @@
     function suggestSection(sections) {
       const sug = suggestedExercises(sections);
       const secEl = el('section', 'section wide suggest');
+      secEl.id = 'suggest-sec';
       const open = suggestOpen;
       if (!open) secEl.classList.add('collapsed');
       const head = el('div', 'section-head');
@@ -1087,9 +1097,11 @@
     // Up next: picked for a later session. Move to today, or remove.
     function upNextSection(list) {
       const secEl = el('section', 'section wide upnext');
+      secEl.id = 'next-sec';
       const head = el('div', 'section-head');
       head.append(el('span', 'section-name', 'Up next'), el('span', 'section-count', String(list.length)));
       secEl.append(head);
+      if (!list.length) secEl.append(el('p', 'empty small', 'Nothing queued. Tick suggestions, then tap Up next.'));
       list.forEach(ex => {
         const row = el('div', 'pick-row next-row' + (isDoneToday(ex) ? ' done' : ''));
         row.dataset.key = ex.key;
@@ -1310,12 +1322,22 @@
       if (sortMode === 'category' || sortMode === 'days') {
         const base = buildSections();
         const planned = plannedExercises(base);
-        wrap.append(sectionEl({ name: 'Today', exercises: planned, wide: true, focus: true,
+        wrap.append(sectionEl({ id: 'today-sec', name: 'Today', exercises: planned, wide: true, focus: true,
           emptyText: 'Nothing planned yet. Tick suggestions below, or tap + Today on any exercise.' }));
         wrap.append(suggestSection(base));
-        if (upNext.length) wrap.append(upNextSection(upNext));
+        wrap.append(upNextSection(upNext));
+        // Divider before every exercise, with the sort toggle on it.
         const zone = el('div', 'zone wide');
+        zone.id = 'all-sec';
         zone.append(el('span', '', 'All exercises'));
+        const sortBox = el('span', 'sort-toggle');
+        [['category', 'Category'], ['days', 'Days']].forEach(([mode, label]) => {
+          const b = el('button', sortMode === mode ? 'active' : '', label);
+          b.type = 'button';
+          b.addEventListener('click', () => { if (sortMode !== mode) setMode(mode); });
+          sortBox.append(b);
+        });
+        zone.append(sortBox);
         wrap.append(zone);
       }
       sections.forEach(sec => wrap.append(sectionEl(sec)));
@@ -1328,6 +1350,7 @@
           ? exercises.filter(isDoneToday).length + ' / ' + exercises.length + ' done'
           : weekCount(exercises) + ' this week';
         const secEl = el('section', 'section' + (sec.wide ? ' wide' : '') + (sec.focus ? ' focus' : ''));
+        if (sec.id) secEl.id = sec.id;
         const head = el('div', 'section-head');
         head.append(el('span', 'section-name', sec.name), el('span', 'section-count', countText));
         secEl.append(head);
@@ -1369,18 +1392,34 @@
       }
     }
 
+    // Sort for the "All exercises" lists (toggle on the divider).
     function setMode(mode) {
       sortMode = mode;
-      document.querySelectorAll('.controls button').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
       if (data) render();
     }
 
+    // Top buttons jump to a zone, below the sticky header.
+    function scrollToZone(id) {
+      const target = document.getElementById(id);
+      if (!target) return;
+      const offset = document.querySelector('.top').offsetHeight + 8;
+      window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY - offset, behavior: 'smooth' });
+    }
     document.querySelectorAll('.controls button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        setMode(btn.dataset.sort);
-        window.scrollTo(0, 0);
-      });
+      btn.addEventListener('click', () => scrollToZone(btn.dataset.jump));
     });
+
+    // Highlight the zone currently under the header.
+    function markZone() {
+      const line = document.querySelector('.top').offsetHeight + 20;
+      let current = 'today-sec';
+      ['today-sec', 'suggest-sec', 'next-sec', 'all-sec'].forEach(id => {
+        const n = document.getElementById(id);
+        if (n && n.getBoundingClientRect().top <= line) current = id;
+      });
+      document.querySelectorAll('.controls button').forEach(b => b.classList.toggle('active', b.dataset.jump === current));
+    }
+    window.addEventListener('scroll', markZone, { passive: true });
 
     // ---------- Notes panel ----------
     const notesStatus = t => { document.getElementById('notes-status').textContent = t; };
