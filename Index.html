@@ -582,6 +582,17 @@
     .mini, .rest-edit-btn, .rest-line .jump { border-radius: 8px; }
 
     /* One-tap Today / Next. */
+    /* This week: headlines keep the underline but stay quiet like the text;
+       a clear rule splits Going well from Suggestions. */
+    .sum-line .key {
+      font-size: 14px; font-weight: 500; color: var(--muted);
+      text-decoration-thickness: 1px; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent);
+    }
+    .section.summary .grp { padding-bottom: 6px; }
+    .section.summary .grp + .grp {
+      border-top: 2px solid color-mix(in srgb, var(--zone) 50%, var(--border));
+      margin-top: 4px;
+    }
     .quick { grid-column: 1 / -1; display: flex; gap: 6px; margin-top: 8px; }
     .q-btn {
       height: 32px; padding: 0 12px; font-size: 13px; font-weight: 600;
