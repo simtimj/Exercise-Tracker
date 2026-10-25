@@ -301,6 +301,46 @@
     #notes-list li span { flex: 1; overflow-wrap: anywhere; }
     #notes-list li button { padding: 0 8px; }
     #notes-status { font-size: 12px; color: var(--muted); }
+
+    /* ---------- PT this week: pinned checklist strip ---------- */
+    #pt-strip { margin-top: 8px; }
+    #pt-strip:empty { display: none; }
+    .pt-line {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600;
+    }
+    .pt-line .pt-label { white-space: nowrap; }
+    .pt-line .pt-count { white-space: nowrap; color: var(--muted); font-weight: 500; }
+    .pt-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+    .pt-bar span { display: block; height: 100%; background: hsl(120 var(--heat-sat) var(--heat-light)); }
+    .pt-bar.all span { background: hsl(140 55% 42%); }
+    .pt-chips {
+      display: flex; gap: 6px; margin-top: 6px;
+      overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    }
+    .pt-chips::-webkit-scrollbar { display: none; }
+    .chip {
+      flex: 0 0 auto;
+      display: flex; align-items: center; gap: 4px;
+      max-width: 11em;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 12px;
+    }
+    .chip .chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chip .chip-n { font-size: 11px; color: var(--muted); }
+    .chip.partial { border-color: hsl(40 60% 55%); background: color-mix(in srgb, hsl(40 70% 60%) 14%, var(--card)); }
+    .chip.met { border-color: transparent; background: color-mix(in srgb, hsl(130 45% 50%) 18%, var(--card)); color: var(--muted); }
+
+    /* PT cards: met ones get a check and step back so what's left stands out. */
+    .ex.met .ex-name::before { content: '✓ '; color: hsl(130 45% 40%); }
+    .ex.met:not(.done) { opacity: 0.7; }
+    .ex { scroll-margin-top: 150px; }
+    .ex.flash { animation: flash 1.2s ease-out; }
+    @keyframes flash { from { box-shadow: inset 0 0 0 2px var(--text); } to { box-shadow: inset 0 0 0 2px transparent; } }
   </style>
 </head>
 
@@ -318,6 +358,8 @@
       <button data-sort="today">Done today</button>
       <button data-sort="plan">Plan</button>
     </div>
+
+    <div id="pt-strip"></div>
 
     <div class="legend"><span>Just trained</span><div class="bar"></div><span>Recovered</span></div>
   </div>
@@ -399,7 +441,7 @@
       const m = raw.match(FREQ_RE);
       const clean = (m ? raw.slice(0, m.index) : raw).replace(/[.\s]+$/, '').replace(/\s{2,}/g, ' ');
       const freq = m ? (m[2] ? m[1] + '–' + m[2] : m[1]) + '×/wk' : '';
-      return { name: clean || raw, freq };
+      return { name: clean || raw, freq, freqMin: m ? Number(m[1]) : 0 };
     }
 
     // Last weight used: newest entry across this exercise's rows, else any
@@ -466,6 +508,9 @@
         const target = slots.find(slotToday) || slots.find(s => !slotThisWeek(s)) || recent[recent.length - 1];
         const parts = slots.map(s => splitName(s.name));
         const shortest = parts.reduce((a, b) => (b.name.length < a.name.length ? b : a));
+        const weekDone = slots.filter(slotThisWeek).length;
+        // Weekly goal: the low end of "2-3x a wk", else one per sheet row.
+        const weekTarget = Math.min(parts.map(p => p.freqMin).find(Boolean) || slots.length, slots.length) || 1;
         return {
           key, slots, recent, latest, target,
           name: shortest.name,
@@ -478,7 +523,9 @@
           lastDate: latest.lastDate,
           dateText: latest.dateText,
           firstRow: slots[0].row,
-          weekDone: slots.filter(slotThisWeek).length,
+          weekDone,
+          weekTarget,
+          met: weekDone >= weekTarget,
         };
       });
     }
@@ -590,7 +637,9 @@
     }
 
     function exerciseCard(ex, showTags) {
-      const card = el('div', 'ex' + (ex.plan && isDoneToday(ex) ? ' done' : ''));
+      const card = el('div', 'ex' + (ex.plan && isDoneToday(ex) ? ' done' : '')
+        + (ex.category === 'PT' && ex.met ? ' met' : ''));
+      card.dataset.key = ex.key;
       card.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
       card.append(el('div', 'ex-name', ex.name),
         el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days)));
@@ -610,11 +659,58 @@
       return card;
     }
 
+    // Pinned "PT this week" strip: progress bar + one chip per PT exercise,
+    // still-to-do first. Tap a chip to jump to that exercise.
+    function renderPtStrip(sections) {
+      const strip = document.getElementById('pt-strip');
+      strip.innerHTML = '';
+      const pt = (sections.find(s => s.name === 'PT') || { exercises: [] }).exercises;
+      if (!pt.length) return;
+      const met = pt.filter(ex => ex.met).length;
+      const done = pt.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0);
+      const goal = pt.reduce((n, ex) => n + ex.weekTarget, 0);
+
+      const line = el('div', 'pt-line');
+      const bar = el('div', 'pt-bar' + (met === pt.length ? ' all' : ''));
+      const fill = el('span');
+      fill.style.width = Math.round(100 * done / goal) + '%';
+      bar.append(fill);
+      line.append(el('span', 'pt-label', 'PT this week'), bar,
+        el('span', 'pt-count', met === pt.length ? 'all done ✓' : met + ' / ' + pt.length + ' done'));
+      strip.append(line);
+
+      const chips = el('div', 'pt-chips');
+      pt.slice()
+        .sort((a, b) => a.met - b.met || a.weekDone / a.weekTarget - b.weekDone / b.weekTarget
+          || b.days - a.days || a.firstRow - b.firstRow)
+        .forEach(ex => {
+          const chip = el('button', 'chip' + (ex.met ? ' met' : ex.weekDone ? ' partial' : ''));
+          chip.type = 'button';
+          chip.title = ex.name;
+          chip.append(el('span', 'chip-name', (ex.met ? '✓ ' : '') + ex.name),
+            el('span', 'chip-n', ex.weekDone + '/' + ex.weekTarget));
+          chip.addEventListener('click', () => jumpTo(ex.key));
+          chips.append(chip);
+        });
+      strip.append(chips);
+    }
+
+    function jumpTo(key) {
+      if (sortMode !== 'category') setMode('category');
+      const card = [...document.querySelectorAll('.section:not(.focus) .ex')].find(c => c.dataset.key === key);
+      if (!card) return;
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      card.classList.remove('flash');
+      void card.offsetWidth; // restart the animation
+      card.classList.add('flash');
+    }
+
     function render() {
       const wrap = document.getElementById('groups');
       wrap.innerHTML = '';
 
       let sections = buildSections();
+      renderPtStrip(sections);
       const all = [].concat(...sections.map(s => s.exercises));
       if (sortMode === 'days') {
         // One list, most days since first; exercises with no date at the bottom.
@@ -673,11 +769,15 @@
       });
     }
 
+    function setMode(mode) {
+      sortMode = mode;
+      document.querySelectorAll('.controls button').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
+      if (data) render();
+    }
+
     document.querySelectorAll('.controls button').forEach(btn => {
       btn.addEventListener('click', () => {
-        sortMode = btn.dataset.sort;
-        document.querySelectorAll('.controls button').forEach(b => b.classList.toggle('active', b === btn));
-        if (data) render();
+        setMode(btn.dataset.sort);
         window.scrollTo(0, 0);
       });
     });
