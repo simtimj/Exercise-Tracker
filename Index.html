@@ -1097,13 +1097,25 @@
         if (!g) ptGroups.push(g = { area: areas[ex.area], items: [] });
         g.items.push(ex);
       });
-      ptGroups.forEach(g => { g.items = doneLast(g.items); g.ready = g.items.some(ptOk); });
+      // Weekly PT sessions, same count as the PT this week strip:
+      // sum min(weekDone, weekTarget) / sum weekTarget, over all PT (met too).
+      const ptAll = all.filter(ex => ex.category === 'PT');
+      const sessions = list => ({
+        done: list.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0),
+        total: list.reduce((n, ex) => n + ex.weekTarget, 0),
+      });
+      ptGroups.forEach(g => {
+        g.items = doneLast(g.items);
+        g.ready = g.items.some(ptOk);
+        g.week = sessions(ptAll.filter(ex => ex.area === g.area.name));
+      });
       ptGroups.sort((a, b) => b.ready - a.ready
         || effectiveDays(b.area.since) - effectiveDays(a.area.since) || a.area.name.localeCompare(b.area.name));
 
       return {
         pt: doneLast(pt),
         ptGroups,
+        ptWeek: sessions(ptAll),
         blocks,
         resting: Object.values(areas).filter(a => !a.ready),
         unmapped: [...new Set(all.filter(ex => ex.area === 'Other').map(ex => ex.group))],
@@ -1265,7 +1277,7 @@
         el('span', 'sub-rest', ' · ' + sinceText(a.since)
           + (a.ready ? '' : ' · resting until ' + a.until)));
       sub.append(lbl);
-      if (!noCount) sub.append(el('span', '', g.items.filter(isDoneToday).length + ' / ' + g.items.length + ' done'));
+      if (!noCount) sub.append(el('span', '', g.week.done + ' / ' + g.week.total + ' this week'));
       return sub;
     }
 
@@ -1281,26 +1293,30 @@
       const items = sug.pt.concat(...sug.blocks.map(b => b.items));
       const done = items.filter(isDoneToday).length;
       head.append(name, el('span', 'section-count', items.length ? done + ' / ' + items.length + ' done' : ''));
-      head.addEventListener('click', () => { suggestOpen = !open; render(); });
-      secEl.append(head);
-      secEl.append(el('div', 'rest-line hint-line', 'Tick the ones you want, then Do today or Up next.'));
-
       if (open) {
-        const restParts = sug.resting.map(a => a.name + ' (until ' + a.until + ')');
-        const rest = el('div', 'rest-line', restParts.length ? 'Resting: ' + restParts.join(' · ') : 'Everything is rested.');
-        if (sug.unmapped.length) rest.append(el('span', 'unmapped', ' · Unmapped: ' + sug.unmapped.join(', ')));
         const editBtn = el('button', 'rest-edit-btn', restEditOpen ? 'Done' : 'Rest days ✎');
         editBtn.type = 'button';
-        editBtn.addEventListener('click', () => { restEditOpen = !restEditOpen; restDraft = null; render(); });
-        rest.append(editBtn);
-        secEl.append(rest);
+        editBtn.addEventListener('click', e => { e.stopPropagation(); restEditOpen = !restEditOpen; restDraft = null; render(); });
+        head.append(editBtn);
+      }
+      head.addEventListener('click', () => { suggestOpen = !open; render(); });
+      secEl.append(head);
+
+      if (open) {
+        // Resting line only when something is resting (Julius: no "Everything is rested").
+        const restParts = sug.resting.map(a => a.name + ' (until ' + a.until + ')');
+        if (restParts.length || sug.unmapped.length) {
+          const rest = el('div', 'rest-line', restParts.length ? 'Resting: ' + restParts.join(' · ') : '');
+          if (sug.unmapped.length) rest.append(el('span', 'unmapped', (restParts.length ? ' · ' : '') + 'Unmapped: ' + sug.unmapped.join(', ')));
+          secEl.append(rest);
+        }
         if (restEditOpen) secEl.append(restEditor());
       }
 
       // PT block: always first, grouped by muscle focus (body area).
       if (sug.pt.length) {
         secEl.append(el('div', 'rest-line pt-lead', 'PT — do these first · '
-          + sug.pt.filter(isDoneToday).length + ' / ' + sug.pt.length + ' done · pick a group:'));
+          + sug.ptWeek.done + ' / ' + sug.ptWeek.total + ' this week · pick a group:'));
         sug.ptGroups.forEach(g => {
           secEl.append(ptGroupSub(g));
           g.items.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true)
@@ -1778,7 +1794,7 @@
       sug.ptGroups.forEach(g => {
         const items = g.items.filter(ex => !isDoneToday(ex));
         if (!items.length) return;
-        s.append(ptGroupSub(g, true));
+        s.append(ptGroupSub(g));
         items.forEach(ex => s.append(pvRow(ex, ex.why ? 'Later · ' + ex.why : pickMeta(ex), [quickAdd(ex, true)])));
       });
       sug.blocks.forEach((b, i) => block((i + 1) + '. ' + b.area.name,
