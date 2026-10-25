@@ -80,6 +80,7 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - Secondary: `blocks` = the top `SUGGEST_AREAS` (3) ready areas, most days since trained first (`1. Arms · 80 days since`), each with the best Compound and best Isolation only (no PT), from the area's most neglected muscle group (`byNeglect`). Areas with nothing to pick are skipped.
 - Open = full cards with a checkbox before the name; collapsed = compact one-line `pick-row`s (checkbox · name · `pickMeta()` = `PT · Hips · 33 days since`, always naming the muscle group (column A), or `PT · Hips · Later · <why>`; same meta in Pick view). Both are selectable.
 - The old "Longest since" chip line and `jumpToArea()` were removed (the area subheads show it).
+- **Nested tree (2026-10-25, Julius):** Suggested (full and Pick view) renders via `appendSuggestTree()` as category → area → exercises: `PT — do these first · 3 / 18 this week` (areas from `ptGroups`, each `Legs · 31 days since · 0 / 6 this week`), then `Compound` and `Isolation`, each with the `blocks` areas (longest since first) holding that category's pick. Category headings are small uppercase `.cat-head` lines; area groups are indented 12px with a 2px left rule (`.section.suggest .grp`). Area subheads come from `areaSub()`; the old numbered `1. Arms` blocks, the PT lead line and the "Then, by area" line are gone. Row meta (`pickMeta()`) no longer repeats the category: `Glute Med · 33 days since`.
 
 ## Layout + calmer colors (2026-10-25, Julius: "too much color, it blurs together")
 

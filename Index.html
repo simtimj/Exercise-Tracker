@@ -630,6 +630,16 @@
     /* Smaller quick buttons. */
     .q-btn { height: 26px; padding: 0 8px; font-size: 12px; font-weight: 600; border-radius: 6px; white-space: nowrap; }
     .quick.compact .q-btn { height: 26px; padding: 0 7px; font-size: 11.5px; }
+    /* Suggested tree (2026-10-25): category heading, then indented area groups. */
+    .cat-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 10px 14px 2px; font-size: 12px; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .cat-head .cat-name { font-weight: 700; color: var(--text); }
+    .cat-head .cat-rest { text-transform: none; letter-spacing: 0; }
+    .cat-head .cat-count { text-transform: none; letter-spacing: 0; }
+    .section.suggest .grp { margin-left: 12px; border-left: 2px solid var(--border); }
   </style>
 </head>
 
@@ -1190,11 +1200,11 @@
       return row;
     }
 
-    // One-line meta: always names the muscle group (Julius), e.g.
-    // `PT · Hips · 3 days since`, or `PT · Hips · Later · rest day …`.
+    // One-line meta under the category/area headings: muscle group + days,
+    // e.g. `Glute Med · 33 days since`, or `Glute Med · Later · rest day …`.
     function pickMeta(ex) {
       const g = ex.suggestGroup;
-      const parts = [ex.category, ex.group];
+      const parts = [ex.group];
       if (ex.why) parts.push('Later', ex.why);
       else if (g) parts.push(sinceText(g.since));
       return parts.join(' · ');
@@ -1274,16 +1284,41 @@
     const sinceText = n => n == null ? 'no log' : n + (n === 1 ? ' day' : ' days') + ' since';
 
     // Subhead for one PT muscle-focus group: `PT · Glutes/Hips · 3 days since`.
-    function ptGroupSub(g, noCount) {
-      const a = g.area;
-      const sub = el('div', 'sub sug-sub pt-head');
+    // Area subhead inside a category: `Legs · 31 days since` (+ resting
+    // note), with an optional right-hand count.
+    function areaSub(a, right) {
+      const sub = el('div', 'sub sug-sub area-head');
       const lbl = el('span', '');
-      lbl.append(el('strong', 'key', 'PT · ' + a.name),
-        el('span', 'sub-rest', ' · ' + sinceText(a.since)
-          + (a.ready ? '' : ' · resting until ' + a.until)));
+      lbl.append(el('strong', 'key', a.name),
+        el('span', 'sub-rest', ' · ' + sinceText(a.since) + (a.ready ? '' : ' · resting until ' + a.until)));
       sub.append(lbl);
-      if (!noCount) sub.append(el('span', '', g.week.done + ' / ' + g.week.total + ' this week'));
+      if (right) sub.append(el('span', '', right));
       return sub;
+    }
+
+    // Suggested as a tree: category (PT → Compound → Isolation), then body
+    // area, then exercises. PT areas follow ptGroups order; Compound and
+    // Isolation areas keep the blocks' longest-since order.
+    function appendSuggestTree(target, sug, rowFn, hideDone) {
+      const keep = list => hideDone ? list.filter(ex => !isDoneToday(ex)) : list;
+      const cats = [];
+      const pt = sug.ptGroups.map(g => ({ area: g.area, right: g.week.done + ' / ' + g.week.total + ' this week', items: keep(g.items) }));
+      cats.push({ name: 'PT', rest: ' — do these first', right: sug.ptWeek.done + ' / ' + sug.ptWeek.total + ' this week', groups: pt });
+      ['Compound', 'Isolation'].forEach(cat => cats.push({ name: cat, rest: '', right: '',
+        groups: sug.blocks.map(b => ({ area: b.area, right: '', items: keep(b.items.filter(ex => ex.category === cat)) })) }));
+      cats.forEach(c => {
+        const groups = c.groups.filter(g => g.items.length);
+        if (!groups.length) return;
+        const head = el('div', 'cat-head');
+        const lbl = el('span', '');
+        lbl.append(el('span', 'cat-name', c.name), el('span', 'cat-rest', c.rest));
+        head.append(lbl, el('span', 'cat-count', c.right));
+        target.append(head);
+        groups.forEach(g => {
+          target.append(areaSub(g.area, g.right));
+          g.items.forEach(ex => target.append(rowFn(ex)));
+        });
+      });
     }
 
     function suggestSection(sections) {
@@ -1318,31 +1353,7 @@
         if (restEditOpen) secEl.append(restEditor());
       }
 
-      // PT block: always first, grouped by muscle focus (body area).
-      if (sug.pt.length) {
-        secEl.append(el('div', 'rest-line pt-lead', 'PT — do these first · '
-          + sug.ptWeek.done + ' / ' + sug.ptWeek.total + ' this week · pick a group:'));
-        sug.ptGroups.forEach(g => {
-          secEl.append(ptGroupSub(g));
-          g.items.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true)
-            : pickRow(ex, pickMeta(ex))));
-        });
-      }
-
-      // Then Compound + Isolation by area, longest since trained first.
-      if (sug.blocks.length) {
-        secEl.append(el('div', 'rest-line', sug.pt.length ? 'Then, by area — longest since first:' : 'By area — longest since first:'));
-      }
-      sug.blocks.forEach((b, i) => {
-        const a = b.area;
-        const sub = el('div', 'sub sug-sub area-head');
-        const lbl = el('span', '');
-        lbl.append(el('strong', 'key', (i + 1) + '. ' + a.name), el('span', 'sub-rest', ' · ' + sinceText(a.since)));
-        sub.append(lbl,
-          el('span', '', b.items.filter(isDoneToday).length + ' / ' + b.items.length + ' done'));
-        secEl.append(sub);
-        b.items.forEach(ex => secEl.append(open ? exerciseCard(ex, false, true) : pickRow(ex, pickMeta(ex))));
-      });
+      appendSuggestTree(secEl, sug, ex => open ? exerciseCard(ex, false, true) : pickRow(ex, pickMeta(ex)));
 
       if (!items.length) {
         secEl.append(el('p', 'empty', 'Nothing to suggest — every area is resting and this week\'s PT is done.'));
@@ -1792,23 +1803,7 @@
       // Suggested: tap to add, nothing logged here.
       const sug = suggestedExercises(base);
       const s = pvSection('suggest-sec', 'suggest', 'Suggested', '');
-      const block = (label, rest, items, metaFn) => {
-        if (!items.length) return;
-        const sub = el('div', 'sub sug-sub');
-        const lbl = el('span', '');
-        lbl.append(el('strong', 'key', label), el('span', 'sub-rest', rest));
-        sub.append(lbl);
-        s.append(sub);
-        items.filter(ex => !isDoneToday(ex)).forEach(ex => s.append(pvRow(ex, metaFn(ex), [quickAdd(ex, true)])));
-      };
-      sug.ptGroups.forEach(g => {
-        const items = g.items.filter(ex => !isDoneToday(ex));
-        if (!items.length) return;
-        s.append(ptGroupSub(g));
-        items.forEach(ex => s.append(pvRow(ex, pickMeta(ex), [quickAdd(ex, true)])));
-      });
-      sug.blocks.forEach((b, i) => block((i + 1) + '. ' + b.area.name,
-        ' · ' + sinceText(b.area.since), b.items, pickMeta));
+      appendSuggestTree(s, sug, ex => pvRow(ex, pickMeta(ex), [quickAdd(ex, true)]), true);
       if (s.children.length === 1) s.append(el('p', 'empty small', 'Nothing to suggest right now.'));
       out.push(boxGroups(s));
       return out;
