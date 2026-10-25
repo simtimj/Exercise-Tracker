@@ -1179,7 +1179,7 @@
     function pickMeta(ex) {
       const g = ex.suggestGroup;
       const parts = [ex.category];
-      if (g && g.name !== ex.area) parts.push(g.name + ' ' + (g.since == null ? 'no log' : g.since + 'd'));
+      if (g && g.name !== ex.area) parts.push(g.name + ' ' + sinceText(g.since));
       return parts.join(' · ');
     }
 
@@ -1253,13 +1253,16 @@
       return secEl;
     }
 
-    // Subhead for one PT muscle-focus group: `PT · Glutes/Hips · 3d since`.
+    // "31 days since" / "1 day since" — spelled out (Julius: "31d" was confusing).
+    const sinceText = n => n == null ? 'no log' : n + (n === 1 ? ' day' : ' days') + ' since';
+
+    // Subhead for one PT muscle-focus group: `PT · Glutes/Hips · 3 days since`.
     function ptGroupSub(g, noCount) {
       const a = g.area;
       const sub = el('div', 'sub sug-sub pt-head');
       const lbl = el('span', '');
       lbl.append(el('strong', 'key', 'PT · ' + a.name),
-        el('span', 'sub-rest', ' · ' + (a.since == null ? 'no log' : a.since + 'd since')
+        el('span', 'sub-rest', ' · ' + sinceText(a.since)
           + (a.ready ? '' : ' · resting until ' + a.until)));
       sub.append(lbl);
       if (!noCount) sub.append(el('span', '', g.items.filter(isDoneToday).length + ' / ' + g.items.length + ' done'));
@@ -1313,7 +1316,7 @@
         const a = b.area;
         const sub = el('div', 'sub sug-sub area-head');
         const lbl = el('span', '');
-        lbl.append(el('strong', 'key', (i + 1) + '. ' + a.name), el('span', 'sub-rest', ' · ' + (a.since == null ? 'no log' : a.since + 'd since')));
+        lbl.append(el('strong', 'key', (i + 1) + '. ' + a.name), el('span', 'sub-rest', ' · ' + sinceText(a.since)));
         sub.append(lbl,
           el('span', '', b.items.filter(isDoneToday).length + ' / ' + b.items.length + ' done'));
         secEl.append(sub);
@@ -1587,10 +1590,10 @@
       if (ex.suggest) {
         const a = ex.suggest;
         meta.append(el('span', 'tag area' + (a.name === 'Other' ? ' other' : ''),
-          isDoneToday(ex) ? a.name + ' · ✓ done' : a.name + ' · ' + (a.since == null ? 'no log' : a.since + 'd since')));
+          isDoneToday(ex) ? a.name + ' · ✓ done' : a.name + ' · ' + sinceText(a.since)));
         const g = ex.suggestGroup;
         if (g && g.name !== a.name && !isDoneToday(ex)) {
-          meta.append(el('span', 'tag', g.name + ' · ' + (g.since == null ? 'no log' : g.since + 'd')));
+          meta.append(el('span', 'tag', g.name + ' · ' + sinceText(g.since)));
         }
         meta.append(el('span', 'tag', ex.category));
         if (ex.why && !isDoneToday(ex)) meta.append(el('span', 'tag later', 'Later · ' + ex.why));
@@ -1779,7 +1782,7 @@
         items.forEach(ex => s.append(pvRow(ex, ex.why ? 'Later · ' + ex.why : pickMeta(ex), [quickAdd(ex, true)])));
       });
       sug.blocks.forEach((b, i) => block((i + 1) + '. ' + b.area.name,
-        ' · ' + (b.area.since == null ? 'no log' : b.area.since + 'd since'), b.items, pickMeta));
+        ' · ' + sinceText(b.area.since), b.items, pickMeta));
       if (s.children.length === 1) s.append(el('p', 'empty small', 'Nothing to suggest right now.'));
       out.push(boxGroups(s));
       return out;
