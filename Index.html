@@ -781,6 +781,29 @@
     .cat-head .cat-rest { text-transform: none; letter-spacing: 0; }
     .cat-head .cat-count { text-transform: none; letter-spacing: 0; }
     .section.suggest .grp { margin-left: 12px; border-left: 2px solid var(--border); }
+
+    /* Options (⋯ top right) and the PT spread block (2026-10-26). */
+    .opt-btn { margin-right: 0; font-weight: 700; }
+    .opt-panel {
+      position: absolute; right: 0; top: 46px; z-index: 20;
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 12px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); font-size: 14px;
+    }
+    .opt-panel[hidden] { display: none; }
+    .opt-row { display: flex; align-items: center; gap: 8px; }
+    .opt-row .opt-name { margin-right: 6px; }
+    .opt-row button {
+      min-width: 32px; height: 30px; font-size: 15px;
+      border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text);
+    }
+    .opt-row #spread-n { min-width: 1.4em; text-align: center; font-weight: 700; }
+    .spread { margin: 2px 0 8px; }
+    .spread-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 12px; border-top: 1px solid var(--border); }
+    .spread-row.done { opacity: 0.55; }
+    .spread-row .sp-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .spread-row .sp-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .spread-row .sp-meta { font-size: 12px; color: var(--muted); }
+    .spread-row .quick.compact { display: flex; gap: 4px; margin: 0; }
   </style>
 </head>
 
@@ -794,7 +817,16 @@
         <button class="notes-btn" data-view="pick" type="button">Simple</button>
         <button class="notes-btn" data-view="full" type="button">Full</button>
       </div>
+      <button class="refresh-btn opt-btn" id="opt-btn" type="button" title="Options" aria-label="Options">⋯</button>
     </header>
+    <div class="opt-panel" id="opt-panel" hidden>
+      <div class="opt-row">
+        <span class="opt-name">PT spread picks</span>
+        <button type="button" data-spread="-1" aria-label="Fewer">−</button>
+        <span id="spread-n">5</span>
+        <button type="button" data-spread="1" aria-label="More">+</button>
+      </div>
+    </div>
 
     <div class="controls">
       <button data-jump="today-sec" class="active">Today</button>
@@ -1473,6 +1505,82 @@
       });
     }
 
+    // ---------- PT spread (2026-10-26, Julius) ----------
+    // N PT picks spread across the PT muscle groups (column A: Core, Glute
+    // Max, Glute Med, Hamstrings, Quads). Every slot goes to the group with
+    // the highest score = days rested / (slots it already has + 1), so a
+    // fresh start gives one per group, and a very rested group can earn a
+    // second pick before a just-trained one gets its first. Nothing is
+    // skipped; done today/yesterday just scores low (min 1 day). As of this
+    // morning, like the rest of Suggested, so it doesn't reshuffle while
+    // logging. Inside a group: still owed this week first, then longest gap.
+    const SPREAD_MIN = 1, SPREAD_MAX = 10;
+    let spreadN = 5;
+    try {
+      const v = parseInt(localStorage.getItem('spreadN'), 10);
+      if (v >= SPREAD_MIN && v <= SPREAD_MAX) spreadN = v;
+    } catch (e) {}
+
+    function ptSpread(sections, n) {
+      const all = [].concat(...sections.map(s => s.exercises));
+      const pt = all.filter(ex => ex.category === 'PT').sort((a, b) => a.firstRow - b.firstRow);
+      const groups = groupStatus(all);
+      const order = [];
+      pt.forEach(ex => { if (!order.includes(ex.group)) order.push(ex.group); });
+      const rested = g => Math.max(1, effectiveDays(groups[g].since));
+      const owed = ex => ex.weekDone - ex.slots.filter(slotToday).length < ex.weekTarget;
+      const pool = {}, taken = {};
+      order.forEach(g => {
+        taken[g] = 0;
+        pool[g] = pt.filter(ex => ex.group === g)
+          .sort((a, b) => owed(b) - owed(a) || daysBeforeToday(b) - daysBeforeToday(a) || a.firstRow - b.firstRow);
+      });
+      const out = [];
+      while (out.length < n) {
+        let best = null, bestScore = -1;
+        order.forEach(g => {
+          if (taken[g] >= pool[g].length) return;
+          const score = rested(g) / (taken[g] + 1);
+          // Ties: the group with fewer picks wins (spread), then the more rested.
+          const tie = score === bestScore && (taken[g] < taken[best] || (taken[g] === taken[best] && rested(g) > rested(best)));
+          if (score > bestScore || tie) { best = g; bestScore = score; }
+        });
+        if (best == null) break;
+        out.push(Object.assign({}, pool[best][taken[best]++], { spreadSince: groups[best].since }));
+      }
+      return out;
+    }
+
+    function spreadBlock(sections) {
+      const list = ptSpread(sections, spreadN);
+      const box = el('div', 'spread');
+      if (!list.length) return box;
+      const head = el('div', 'cat-head');
+      const lbl = el('span', '');
+      lbl.append(el('span', 'cat-name', 'PT spread'), el('span', 'cat-rest', ' · most rested groups'));
+      head.append(lbl, el('span', 'cat-count', String(list.length)));
+      box.append(head);
+      list.forEach(ex => {
+        const done = isDoneToday(ex);
+        const row = el('div', 'spread-row' + (done ? ' done' : ''));
+        row.dataset.key = ex.key;
+        const txt = el('span', 'sp-text');
+        txt.append(el('span', 'sp-name', (done ? '✓ ' : '') + ex.name),
+          el('span', 'sp-meta', ex.group + ' · ' + sinceText(ex.spreadSince)));
+        row.append(txt);
+        if (!done) row.append(quickAdd(ex, true));
+        box.append(row);
+      });
+      return box;
+    }
+
+    function setSpreadN(n) {
+      spreadN = Math.max(SPREAD_MIN, Math.min(SPREAD_MAX, n));
+      try { localStorage.setItem('spreadN', String(spreadN)); } catch (e) {}
+      document.getElementById('spread-n').textContent = spreadN;
+      render();
+    }
+
     function suggestSection(sections) {
       const sug = suggestedExercises(sections);
       const secEl = el('section', 'section wide suggest');
@@ -1505,6 +1613,7 @@
         if (restEditOpen) secEl.append(restEditor());
       }
 
+      secEl.append(spreadBlock(sections));
       appendSuggestTree(secEl, sug, ex => open ? exerciseCard(ex, false, true) : pickRow(ex, pickMeta(ex)));
 
       if (!items.length) {
@@ -2300,8 +2409,9 @@
     function compactSuggest(base) {
       const sug = suggestedExercises(base);
       const s = pvSection('suggest-sec', 'suggest', 'Suggested', '');
+      s.append(spreadBlock(base));
       appendSuggestTree(s, sug, ex => pvRow(ex, pickMeta(ex), [quickAdd(ex, true)]), true);
-      if (s.children.length === 1) s.append(el('p', 'empty small', 'Nothing to suggest right now.'));
+      if (s.children.length === 2 && !s.children[1].children.length) s.append(el('p', 'empty small', 'Nothing to suggest right now.'));
       return boxGroups(s);
     }
 
@@ -2549,6 +2659,17 @@
     // ↻ next to the title = full page reload (picks up new deploys too). It's a
     // real target=_top link to the web app URL, since the app runs in an iframe.
     // Until the URL arrives it just reloads the data.
+    // Options panel (⋯ top right): PT spread count, remembered per device.
+    const optPanel = document.getElementById('opt-panel');
+    document.getElementById('spread-n').textContent = spreadN;
+    document.getElementById('opt-btn').addEventListener('click', e => { e.stopPropagation(); optPanel.hidden = !optPanel.hidden; });
+    optPanel.addEventListener('click', e => {
+      e.stopPropagation();
+      const b = e.target.closest('[data-spread]');
+      if (b) setSpreadN(spreadN + Number(b.dataset.spread));
+    });
+    document.addEventListener('click', () => { optPanel.hidden = true; });
+
     const refreshBtn = document.getElementById('refresh-btn');
     refreshBtn.addEventListener('click', e => {
       setStatus('Refreshing…');
