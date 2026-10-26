@@ -78,6 +78,7 @@
       width: 30px; height: 30px; padding: 0; border-radius: 50%;
       border: 1px solid var(--border); background: var(--card); color: var(--text);
       font-size: 16px; line-height: 1; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
     }
     .refresh-btn.spin { animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -759,7 +760,7 @@
   <div class="top">
     <header>
       <h1>Exercise Tracker</h1>
-      <button class="refresh-btn" id="refresh-btn" type="button" title="Refresh" aria-label="Refresh">↻</button>
+      <a class="refresh-btn" id="refresh-btn" target="_top" role="button" title="Refresh" aria-label="Refresh">↻</a>
       <div id="status">Loading…</div>
       <div class="view-tabs" id="view-tabs">
         <button class="notes-btn" data-view="pick" type="button">Simple</button>
@@ -2466,12 +2467,11 @@
         .addNote(text);
     });
 
-    // Load (and reload) the sheet data. The ↻ button next to the title calls this.
+    // Load the sheet data.
     function loadData() {
       const btn = document.getElementById('refresh-btn');
       btn.classList.add('spin');
-      btn.disabled = true;
-      const done = () => { btn.classList.remove('spin'); btn.disabled = false; };
+      const done = () => btn.classList.remove('spin');
       google.script.run
         .withSuccessHandler(result => {
           data = result;
@@ -2482,7 +2482,16 @@
         .withFailureHandler(err => { setStatus('Error: ' + err.message); done(); })
         .getTrackerData();
     }
-    document.getElementById('refresh-btn').addEventListener('click', () => { setStatus('Refreshing…'); loadData(); });
+    // ↻ next to the title = full page reload (picks up new deploys too). It's a
+    // real target=_top link to the web app URL, since the app runs in an iframe.
+    // Until the URL arrives it just reloads the data.
+    const refreshBtn = document.getElementById('refresh-btn');
+    refreshBtn.addEventListener('click', e => {
+      setStatus('Refreshing…');
+      refreshBtn.classList.add('spin');
+      if (!refreshBtn.getAttribute('href')) { e.preventDefault(); loadData(); }
+    });
+    google.script.run.withSuccessHandler(url => { if (url) refreshBtn.href = url; }).getAppUrl();
     loadData();
   </script>
 </body>

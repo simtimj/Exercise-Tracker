@@ -21,7 +21,7 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 - Notes panel (temporary, 2026-10-23): "Notes" button in the header opens a right-side panel to add/remove app to-dos. Stored in the Google Doc "Exercise Tracker – App notes" (`NOTES_DOC_ID` in `code.js`, one paragraph per note, first paragraph is the title). Claude reads it with the Drive connector (`read_file_content`) when asked to work on the notes. Server: `getNotes()`, `addNote(text)`, `removeNote(i, text)`.
 - `appsscript.json` — V8, America/Los_Angeles, web app executes as the deploying user, access MYSELF.
 
-- Refresh (2026-10-25): a ↻ button right of the title re-runs `loadData()` (fetches `getTrackerData()` again and re-renders) — no full page reload.
+- Refresh (2026-10-26, Julius: wants a real page refresh, the browser's is hard to reach): the ↻ right of the title is a `target="_top"` link to `getAppUrl()` (`ScriptApp.getService().getUrl()`), so it reloads the whole app — new deploys and data. Before the URL arrives it falls back to `loadData()`.
 
 ## Source sheet
 

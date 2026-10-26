@@ -222,6 +222,11 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
+// Web app URL, so the client's ↻ button can reload the whole page (new code + data).
+function getAppUrl() {
+  return ScriptApp.getService().getUrl();
+}
+
 function getSheetData() {
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_NAME);
   return sheet.getDataRange().getDisplayValues();
