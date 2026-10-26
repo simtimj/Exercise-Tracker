@@ -285,7 +285,7 @@
       color: var(--text);
     }
 
-    .log input.weight { flex: 0 0 6.5em; }
+    .log input.weight { flex: 0 0 7.5em; }
 
     .log button {
       height: 40px;
@@ -945,10 +945,10 @@
     function logBox(ex) {
       const form = el('form', 'log');
       const weight = el('input', 'weight');
-      weight.placeholder = 'Weight';
+      weight.placeholder = 'Weight / band';
       weight.value = (ex.plan && ex.plan.weight) || lastWeight(ex);
       const input = el('input');
-      input.placeholder = '15, 15, 15';
+      input.placeholder = 'Reps: 15, 15, 15';
       input.enterKeyHint = 'done';
       input.inputMode = 'text';
       const btn = el('button', '', 'Log');
@@ -2113,11 +2113,9 @@
     }
 
     // ---------- Pick view (experiment, 2026-10-25) ----------
-    // Small and concise: Today, Up next, Suggested as one-line rows.
-    // No logging here — rows only move exercises between the lists.
-    // Header view tabs (2026-10-25), left to right: Today (full cards with
-    // logging for today + Up next, compact Suggested below), Simple (internal
-    // 'pick': compact choosing), Full (everything).
+    // Simple view (internal 'pick'): Today as full cards with logging, then
+    // Up next and Suggested as compact one-line rows (move between lists).
+    // Header view tabs: Simple · Full.
     let view = 'full';
     try {
       view = localStorage.getItem('view') || (localStorage.getItem('pickView') === '1' ? 'pick' : 'full');
@@ -2180,20 +2178,10 @@
     function pickViewSections(base, upNext) {
       const out = [];
 
-      // Today
-      const planned = plannedExercises(base);
-      const done = planned.filter(isDoneToday).length;
-      const t = pvSection('today-sec', 'focus', 'Today', planned.length ? done + ' / ' + planned.length + ' done' : '');
-      if (!planned.length) t.append(el('p', 'empty small', 'Nothing yet — add from Suggested below.'));
-      planned.forEach(ex => {
-        const btns = [];
-        if (ex.plan && ex.plan.picked && !isDoneToday(ex)) {
-          btns.push(pvButton('→ Next', 'Move to Up next', () => savePicks(movePicks([ex.key], 'next'), 'Up next: ' + ex.name)),
-            pvButton('✕', 'Remove from today', () => savePicks(movePicks([ex.key], null), 'Removed: ' + ex.name)));
-        }
-        t.append(pvRow(ex, pvMeta(ex), btns));
-      });
-      out.push(t);
+      // Today: full cards with details + Weight/band and reps logging
+      // (Julius, 2026-10-25). To do, then Done today ✓; Later / ✕ on picks.
+      out.push(sectionEl({ id: 'today-sec', name: 'Today', exercises: plannedExercises(base), wide: true, focus: true,
+        emptyText: 'Nothing yet — add from Suggested below.' }));
 
       // Up next
       const n = pvSection('next-sec', 'upnext', 'Up next', upNext.length ? String(upNext.length) : '');
@@ -2263,16 +2251,6 @@
       if (pickView) {
         const base = buildSections();
         pickViewSections(base, upNext).forEach(n => wrap.append(n));
-        setTopHeight();
-        return;
-      }
-      if (view === 'today') {
-        // Today focus: full cards (facts + log box) for today, Up next below.
-        const base = buildSections();
-        wrap.append(sectionEl({ id: 'today-sec', name: 'Today', exercises: plannedExercises(base), wide: true, focus: true,
-          emptyText: 'Nothing for today yet. Add some from Suggested below.' }));
-        wrap.append(upNextSection(upNext));
-        wrap.append(compactSuggest(base));
         setTopHeight();
         return;
       }
