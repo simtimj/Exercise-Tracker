@@ -1063,7 +1063,8 @@
         // Reps per set, tidied to "20, 20" (commas or spaces both work).
         const sets = input.value.split(/[\s,]+/).filter(Boolean).join(', ');
         // "25lbs: 20, 20" — weight/band, colon, then reps per set (Julius, 2026-10-25).
-        const entry = sets ? (w ? w + ': ' + sets : sets) : '';
+        // Weight with no reps still saves the weight (2026-10-26).
+        const entry = sets ? (w ? w + ': ' + sets : sets) : w;
         if (!entry && !confirm('Mark "' + ex.name + '" done today with no sets?')) return;
         btn.disabled = true;
         btn.textContent = '…';
