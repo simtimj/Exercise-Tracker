@@ -643,6 +643,13 @@
     .cat-head .cat-rest { text-transform: none; letter-spacing: 0; }
     .cat-head .cat-count { text-transform: none; letter-spacing: 0; }
     .section.suggest .grp { margin-left: 12px; border-left: 2px solid var(--border); }
+
+    /* Exercise picture (2026-10-26): small thumbnail at the top of the right
+       column; tap to flip between the start and end position. */
+    .ex-img {
+      width: 72px; height: 54px; object-fit: cover; border-radius: 6px;
+      background: var(--border); cursor: pointer; display: block;
+    }
   </style>
 </head>
 
@@ -1613,6 +1620,68 @@
       document.getElementById('status').textContent = text;
     }
 
+    // Pictures from free-exercise-db (public domain, github.com/yuhonas/free-exercise-db),
+    // pinned to a commit. Keys = start of the lowercased exercise name, longest
+    // key wins (like GROUP_RENAMES). [key, folder, frame shown first (0 = start,
+    // 1 = end)]. No free picture yet: side lying hip abduction, clam shells, bird dog.
+    const IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5/exercises/';
+    const EXERCISE_IMAGES = [
+      ['1 leg weighted glute bridge', 'Single_Leg_Glute_Bridge', 1],
+      ['lateral band walks', 'Monster_Walk', 1],
+      ['romanian deadlift', 'Romanian_Deadlift', 1],
+      ['bulgarian split squat', 'Split_Squat_with_Dumbbells', 1],
+      ['weighted step ups', 'Dumbbell_Step_Ups', 1],
+      ['dead bugs', 'Dead_Bug', 0],
+      ['pull ups', 'Pullups', 0],
+      ['barbell row', 'Bent_Over_Barbell_Row', 1],
+      ['one-arm dumbbell row', 'One-Arm_Dumbbell_Row', 1],
+      ['rear delt flys', 'Seated_Bent-Over_Rear_Delt_Raise', 1],
+      ['squat', 'Goblet_Squat', 1],
+      ['walking lunge', 'Bodyweight_Walking_Lunge', 1],
+      ['bench press', 'Barbell_Bench_Press_-_Medium_Grip', 0],
+      ['incline bench press', 'Barbell_Incline_Bench_Press_-_Medium_Grip', 0],
+      ['dips', 'Dips_-_Chest_Version', 0],
+      ['overhead press', 'Standing_Military_Press', 1],
+      ['lateral raise', 'Side_Lateral_Raise', 1],
+      ['decline crunch', 'Decline_Crunch', 0],
+      ['ab wheel', 'Ab_Roller', 1],
+      ['plank', 'Plank', 1],
+      ['hanging knee raise', 'Hanging_Leg_Raise', 1],
+      ['side plank', 'Side_Bridge', 1],
+      ['bicep curl', 'Barbell_Curl', 1],
+      ['triceps extension', 'Standing_Dumbbell_Triceps_Extension', 1],
+      ['weighted calf raise', 'Standing_Dumbbell_Calf_Raise', 1],
+    ];
+
+    function imageFor(name) {
+      const n = String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      let best = null;
+      EXERCISE_IMAGES.forEach(entry => {
+        const key = entry[0];
+        if ((n === key || n.startsWith(key + ' ') || n.startsWith(key + '.') || n.startsWith(key + '('))
+          && (!best || key.length > best[0].length)) best = entry;
+      });
+      return best;
+    }
+
+    // Thumbnail; tapping flips between the start (0.jpg) and end (1.jpg) frames.
+    function exerciseImage(ex) {
+      const found = imageFor(ex.name);
+      if (!found) return null;
+      let frame = found[2];
+      const img = el('img', 'ex-img');
+      img.loading = 'lazy';
+      img.alt = ex.name;
+      img.title = 'Tap to see the other position';
+      img.src = IMG_BASE + found[1] + '/' + frame + '.jpg';
+      img.addEventListener('click', () => {
+        frame = 1 - frame;
+        img.src = IMG_BASE + found[1] + '/' + frame + '.jpg';
+      });
+      img.addEventListener('error', () => img.remove());
+      return img;
+    }
+
     function exerciseCard(ex, showTags, pickable) {
       const card = el('div', 'ex' + ((ex.plan || ex.suggest) && isDoneToday(ex) ? ' done' : '')
         + (ex.category === 'PT' && ex.met ? ' met' : '') + (pickable && picked.has(ex.key) ? ' sel' : ''));
@@ -1627,6 +1696,8 @@
       } else nameEl.textContent = ex.name;
       // Right column: days since, then the one-tap Today / Next buttons.
       const side = el('div', 'side');
+      const pic = exerciseImage(ex);
+      if (pic) side.append(pic);
       side.append(el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days)));
       card.append(nameEl, side);
 
