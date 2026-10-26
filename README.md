@@ -55,6 +55,10 @@ Last updated: 2026-10-26
 
 ## 🧪 To be confirmed (shipped 2026-10-26)
 
+**Simple view Today, compact (2026-10-26)**
+- Today cards sit two per row on a phone (more on a tablet), with smaller text and pictures; Prev 2 is hidden there to save space.
+- **▴ Hide** at the right of the PT · Compound · Isolation tabs folds the grid down to just the tabs, so the sticky header takes almost no room; **▾ Grid** (or tapping a tab) brings it back. Remembered on the device.
+
 - **PT rotation** at the top of Suggested: a fixed, repeating PT order (one from each PT group, then the next of each…) that picks up after the last PT you did. Only an order — nothing is written anywhere.
 - **⇄ swap** on each rotation row: switch that slot to a Compound or Isolation pick for today; the PT it replaced stays next in line.
 - **⋯ options**: "PT picks shown" (how many rows) and "PT order" — Rotation (default) or Spread (the older most-rested-groups mix).

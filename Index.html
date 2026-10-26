@@ -827,6 +827,41 @@
       .spread-row .quick.compact button, .spread-row .sp-swap { padding: 3px 5px; font-size: 11px; }
       .spread-row .thumb { width: 28px; height: 28px; }
     }
+
+    /* Grid hide toggle sits at the right end of the tabs. */
+    .grid-tab.grid-min { margin-left: auto; }
+    body.grid-min .grid-tabs { margin-bottom: 0; }
+
+    /* Simple view Today: two (or more) columns of compact cards
+       (Julius, 2026-10-26: less scrolling, use the width). */
+    body.pick-view #today-sec .grp {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+    body.pick-view #today-sec .grp > .sub, body.pick-view #today-sec .grp > .empty { grid-column: 1 / -1; }
+    body.pick-view #today-sec .grp > .ex,
+    body.pick-view #today-sec .grp > .ex + .ex {
+      border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+      border-right: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+      grid-template-columns: minmax(0, 1fr); padding: 8px 8px 8px 7px; row-gap: 2px; min-width: 0;
+    }
+    body.pick-view #today-sec .ex > .side {
+      grid-column: 1; grid-row: auto; flex-direction: row; align-items: center;
+      justify-content: space-between; gap: 4px; order: 0;
+    }
+    body.pick-view #today-sec .ex .side .quick { flex-direction: row; }
+    body.pick-view #today-sec .ex-name { font-size: 13.5px; gap: 6px; }
+    body.pick-view #today-sec .ex-name > span {
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    body.pick-view #today-sec .ex .thumb { width: 28px; height: 28px; border-radius: 6px; }
+    body.pick-view #today-sec .ex-meta .tag { font-size: 11px; }
+    body.pick-view #today-sec .tag + .tag::before { padding: 0 4px; }
+    body.pick-view #today-sec .facts { font-size: 11px; margin-top: 2px; column-gap: 6px; }
+    body.pick-view #today-sec .facts [data-k="Prev 2"] { display: none; }
+    body.pick-view #today-sec .log { flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    body.pick-view #today-sec .log input,
+    body.pick-view #today-sec .log input.weight { flex: 1 1 0; height: 34px; padding: 0 6px; }
+    body.pick-view #today-sec .log button { flex: 1 1 100%; height: 32px; }
   </style>
 </head>
 
@@ -1131,7 +1166,9 @@
       const row = (label, ...values) => {
         const dd = el('dd');
         dd.append(...values);
-        facts.append(el('dt', '', label), dd);
+        const dt = el('dt', '', label);
+        dt.dataset.k = dd.dataset.k = label;
+        facts.append(dt, dd);
       };
 
       const text = String(ex.dateText || '');
@@ -2234,6 +2271,8 @@
     let gridCat = 'PT';
     try { gridCat = localStorage.getItem('gridCat') || 'PT'; } catch (e) {}
     if (!GRID_CATS.includes(gridCat)) gridCat = 'PT';
+    let gridMin = false;
+    try { gridMin = localStorage.getItem('gridMin') === '1'; } catch (e) {}
     let gridOpen = null; // null, '*' (the whole category) or a group name
 
     // Sessions this week: an exercise done 2×/wk counts twice.
@@ -2385,15 +2424,27 @@
         b.type = 'button';
         b.append(el('span', '', c), el('span', 'grid-tab-n', t.done + '/' + t.total));
         b.addEventListener('click', () => {
-          if (c === gridCat) return;
+          if (c === gridCat && !gridMin) return;
           gridCat = c;
+          if (gridMin) { gridMin = false; try { localStorage.setItem('gridMin', ''); } catch (e) {} }
           gridOpen = null;
           try { localStorage.setItem('gridCat', c); } catch (e) {}
           render();
         });
         tabs.append(b);
       });
+      // Hide / show the grid so the sticky header stays small (Julius, 2026-10-26).
+      const tog = el('button', 'grid-tab grid-min', gridMin ? '▾ Grid' : '▴ Hide');
+      tog.type = 'button';
+      tog.title = gridMin ? 'Show the grid' : 'Hide the grid';
+      tog.addEventListener('click', () => {
+        gridMin = !gridMin;
+        try { localStorage.setItem('gridMin', gridMin ? '1' : ''); } catch (e) {}
+        render();
+      });
+      tabs.append(tog);
       strip.append(tabs);
+      if (gridMin) { gridOpen = null; return; }
 
       const list = byCat[gridCat];
       if (!list.length) return;
@@ -2602,6 +2653,7 @@
       renderPtStrip(sections);
       renderPickBar();
       document.body.classList.toggle('pick-view', view === 'pick');
+      document.body.classList.toggle('grid-min', gridMin);
       document.body.classList.toggle('today-view', view === 'today');
       document.querySelectorAll('#view-tabs [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
       if (data.renames && data.renames.length) wrap.append(renameBanner(data.renames));
