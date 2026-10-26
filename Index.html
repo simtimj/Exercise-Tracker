@@ -619,6 +619,13 @@
     .gx.met .gx-name { color: var(--muted); }
     .gx-cells { display: flex; gap: 2px; flex: 0 0 auto; }
     .gx-cells .seg { flex: 0 0 14px; height: 8px; }
+    /* In Today, not done yet (2026-10-26, Julius): purple = Today's color, kept apart
+       from the red/yellow/green freshness fills. The next empty cell is filled light
+       purple with a purple ring; already at goal → ring on the last cell. */
+    .gx-cells .seg.plan { background: hsl(268 70% 85%); box-shadow: inset 0 0 0 1.5px var(--z-today); }
+    .gx-cells .seg.full.plan { box-shadow: 0 0 0 1.5px var(--z-today); }
+    @media (prefers-color-scheme: dark) { .gx-cells .seg.plan:not(.full) { background: hsl(268 40% 38%); } }
+    .gx.planned .gx-name { color: var(--z-today); font-weight: 600; }
     /* Compact grid (2026-10-26, Julius: too much empty space): names sit in one
        fixed-width column so every exercise's cells start right after its name
        and line up across all groups; groups are sized to their content. */
@@ -2273,10 +2280,18 @@
     function exLines(list) {
       const box = el('div', 'gx-list');
       list.forEach(ex => {
-        const line = el('div', 'gx' + (ex.met ? ' met' : ''));
-        line.title = ex.name;
+        // Loaded into Today and not done yet: the session he's about to do gets a
+        // purple "planned" cell (Today's color, not a freshness color).
+        const planned = todayKeys.has(ex.key) && ex.days !== 0;
+        const line = el('div', 'gx' + (ex.met ? ' met' : '') + (planned ? ' planned' : ''));
+        line.title = ex.name + (planned ? ' · in Today' : '');
         const cells = el('span', 'gx-cells');
-        for (let i = 0; i < ex.weekTarget; i++) cells.append(el('span', 'seg' + (i < ex.weekDone ? ' full' : '')));
+        const nextCell = Math.min(ex.weekDone, ex.weekTarget - 1);
+        for (let i = 0; i < ex.weekTarget; i++) {
+          const full = i < ex.weekDone;
+          const plan = planned && (full ? (ex.weekDone >= ex.weekTarget && i === nextCell) : i === nextCell);
+          cells.append(el('span', 'seg' + (full ? ' full' : '') + (plan ? ' plan' : '')));
+        }
         line.append(el('span', 'gx-name', (ex.met ? '✓ ' : '') + shortName(ex.name)), cells);
         box.append(line);
       });
@@ -2410,6 +2425,11 @@
         k.append(freshDot({ cls: c, label: l }), document.createTextNode(l));
         legend.append(k);
       });
+      const pk = el('span', 'gx-cells');
+      pk.append(el('span', 'seg plan'), document.createTextNode('in Today'));
+      pk.style.gap = '4px';
+      pk.style.alignItems = 'center';
+      legend.append(pk);
       strip.append(legend);
       if (gridOpen && (gridOpen === '*' || groups.some(g => g.name === gridOpen))) strip.append(gridDetail(gridCat, groups));
       else gridOpen = null;

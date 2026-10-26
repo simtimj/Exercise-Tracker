@@ -59,6 +59,7 @@ Last updated: 2026-10-26
 - **⇄ swap** on each rotation row: switch that slot to a Compound or Isolation pick for today; the PT it replaced stays next in line.
 - **⋯ options**: "PT picks shown" (how many rows) and "PT order" — Rotation (default) or Spread (the older most-rested-groups mix).
 - Grid layout: groups fill the width in as many columns as fit (3 on a phone), short names with session boxes right after.
+- **In Today marker on the grid cells**: an exercise loaded into Today (not done yet) shows its next session box in light purple with a purple ring, and its short name turns purple — Today's color, separate from the red/yellow/green freshness colors. Added to the color key as "in Today".
 
 ## 🔧 To be improved
 
