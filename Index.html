@@ -526,12 +526,33 @@
       display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px;
       margin-top: 6px; font-size: 11px; color: var(--muted);
     }
-    .pt-grp { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .pt-grp {
+      display: flex; align-items: center; gap: 6px; min-width: 0;
+      font: inherit; color: inherit; text-align: left;
+      background: transparent; border: 1px solid transparent; border-radius: 6px;
+      padding: 3px 4px; margin: -3px -4px; cursor: pointer;
+    }
+    .pt-grp.solo { grid-column: 1 / -1; }
+    .pt-grp.open { border-color: var(--border); background: var(--soft); }
     .pt-grp-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 6.2em; flex-shrink: 0; }
     .pt-grp .seg { height: 7px; }
     .pt-grp-n { white-space: nowrap; font-variant-numeric: tabular-nums; }
     .pt-grp.partial .pt-grp-name { color: var(--text); }
     .pt-grp.met { opacity: 0.7; }
+    .pt-detail {
+      margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--card); font-size: 13px;
+    }
+    .pt-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .pt-detail-title { font-weight: 600; }
+    .pt-detail-sub { margin-top: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .pt-detail-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
+    .pt-detail-row + .pt-detail-row { border-top: 1px solid var(--border); }
+    .pt-detail-row.met { color: var(--muted); }
+    .pt-detail-text { display: flex; flex-direction: column; min-width: 0; }
+    .pt-detail-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pt-detail-meta { font-size: 11.5px; color: var(--muted); }
+    .pt-detail-why { margin-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.4; }
     .pt-chips {
       display: flex; gap: 6px; margin-top: 6px;
       overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
@@ -1732,6 +1753,51 @@
 
     // Pinned "PT this week" strip: progress bar + one chip per PT exercise,
     // still-to-do first. Tap a chip to jump to that exercise.
+    // PT grid layout: pairs that sit side by side, then singles on their own row.
+    const PT_GRID_ORDER = ['Glute Med', 'Glute Max', 'Quads', 'Hamstrings', 'Core'];
+    const PT_GRID_SOLO = ['Core'];
+    const gridRank = g => { const i = PT_GRID_ORDER.indexOf(g); return i < 0 ? 99 : i; };
+    let ptOpenGroup = null; // group whose details are showing under the grid
+
+    // Details for one PT muscle group: what's left this week, then what's done.
+    function ptGroupDetail(g, pt) {
+      const list = pt.filter(ex => ex.group === g);
+      const box = el('div', 'pt-detail');
+      const head = el('div', 'pt-detail-head');
+      const done = list.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0);
+      const total = list.reduce((n, ex) => n + ex.weekTarget, 0);
+      head.append(el('span', 'pt-detail-title', g + ' · ' + done + ' of ' + total + ' this week'));
+      const close = el('button', 'q-btn', '✕');
+      close.type = 'button';
+      close.title = 'Close';
+      close.addEventListener('click', () => { ptOpenGroup = null; render(); });
+      head.append(close);
+      box.append(head);
+      const left = list.filter(ex => !ex.met);
+      const met = list.filter(ex => ex.met);
+      const line = (ex, isLeft) => {
+        const r = el('div', 'pt-detail-row' + (isLeft ? '' : ' met'));
+        const txt = el('span', 'pt-detail-text');
+        const owe = ex.weekTarget - Math.min(ex.weekDone, ex.weekTarget);
+        txt.append(el('span', 'pt-detail-name', (isLeft ? '' : '✓ ') + ex.name),
+          el('span', 'pt-detail-meta', ex.weekDone + '/' + ex.weekTarget
+            + (isLeft ? ' · ' + owe + ' left' : ' · done') + ' · ' + (ex.noDate ? 'no date' : daysLabel(ex.days))));
+        r.append(txt);
+        if (isLeft && !isDoneToday(ex)) r.append(quickAdd(ex, true));
+        return r;
+      };
+      if (left.length) {
+        box.append(el('div', 'pt-detail-sub', 'Left'));
+        left.forEach(ex => box.append(line(ex, true)));
+      }
+      if (met.length) {
+        box.append(el('div', 'pt-detail-sub', 'Done'));
+        met.forEach(ex => box.append(line(ex, false)));
+      }
+      if (PT_WHY[g]) box.append(el('div', 'pt-detail-why', PT_WHY[g]));
+      return box;
+    }
+
     function renderPtStrip(sections) {
       const strip = document.getElementById('pt-strip');
       strip.innerHTML = '';
@@ -1754,10 +1820,13 @@
       line.append(el('span', 'pt-label', 'PT this week'), bar, count);
       strip.append(line);
 
-      // Breakdown by muscle group (column A: Glute Max, Glute Med, Hamstrings,
-      // Quads, Core…), sheet order, same session math as the total above.
+      // Breakdown by muscle group (column A), laid out by body part:
+      // Glute Med | Glute Max, Quads | Hamstrings, Core on its own row.
+      // Same session math as the total above. Tap a group to see what's
+      // done and what's left, with + Today / + Next right there.
       const groups = [];
       pt.forEach(ex => { if (!groups.includes(ex.group)) groups.push(ex.group); });
+      groups.sort((a, b) => gridRank(a) - gridRank(b));
       const grid = el('div', 'pt-groups');
       groups.forEach(g => {
         const list = pt.filter(ex => ex.group === g);
@@ -1766,13 +1835,20 @@
         const cells = [];
         list.forEach(ex => { for (let i = 0; i < ex.weekTarget; i++) cells.push(i < ex.weekDone ? 1 : 0); });
         const allMet = done >= total;
-        const row = el('div', 'pt-grp' + (allMet ? ' met' : done ? ' partial' : ''));
-        row.title = list.map(ex => ex.name + ' ' + Math.min(ex.weekDone, ex.weekTarget) + '/' + ex.weekTarget).join('\n');
+        const row = el('button', 'pt-grp' + (allMet ? ' met' : done ? ' partial' : '')
+          + (PT_GRID_SOLO.includes(g) ? ' solo' : '') + (ptOpenGroup === g ? ' open' : ''));
+        row.type = 'button';
         row.append(el('span', 'pt-grp-name', (allMet ? '✓ ' : '') + g), segBar(cells, allMet ? 'all' : ''),
           el('span', 'pt-grp-n', done + '/' + total));
+        row.addEventListener('click', () => {
+          ptOpenGroup = ptOpenGroup === g ? null : g;
+          render();
+        });
         grid.append(row);
       });
       strip.append(grid);
+      if (ptOpenGroup && groups.includes(ptOpenGroup)) strip.append(ptGroupDetail(ptOpenGroup, pt));
+      else ptOpenGroup = null;
 
       const chips = el('div', 'pt-chips');
       pt.slice()
@@ -1949,13 +2025,13 @@
       wrap.innerHTML = '';
 
       let sections = buildSections();
-      renderPtStrip(sections);
       const all = [].concat(...sections.map(s => s.exercises));
       exByKey = Object.fromEntries(all.map(ex => [ex.key, ex]));
       [...picked].forEach(k => { if (!exByKey[k]) picked.delete(k); });
       const upNext = upNextExercises(all);
       upNextKeys = new Set(upNext.map(ex => ex.key));
       todayKeys = new Set(plannedExercises(sections).map(ex => ex.key));
+      renderPtStrip(sections);
       renderPickBar();
       document.body.classList.toggle('pick-view', view === 'pick');
       document.body.classList.toggle('today-view', view === 'today');
