@@ -304,6 +304,10 @@
     }
     .section.focus .section-name, .section.suggest .section-name, .section.upnext .section-name { font-size: 16px; }
     .section.summary { --zone: var(--z-next); }
+    .section.why .sum-line .key:empty { display: none; }
+    .section.why .sum-line .key:empty + .sum-body { margin-top: 0; }
+    .section.why .sub { gap: 8px; }
+    .section.why .sub .sub-rest { font-size: 11.5px; text-align: right; }
     .section.summary .chev { font-size: 11px; color: var(--muted); }
     .sum-line { margin: 0; padding: 8px 12px; font-size: 14px; line-height: 1.45; border-top: 1px solid var(--border); }
     /* Main idea first: bold + underlined, details muted underneath. */
@@ -1540,6 +1544,54 @@
       return p;
     }
 
+    // ---------- Why PT (Julius, 2026-10-25) ----------
+    // Plain-English reasons for the PT block, shown at the top of Full view.
+    // Keyed by PT muscle group (column A). Edit the text here.
+    const PT_WHY_GOAL = {
+      head: 'Goal: take the load off the lower back',
+      body: 'Lower back, hip flexors and the right-side QL get tight from sitting a lot. '
+        + 'Weak glutes (especially glute medius) let the low back and QL do work the hips should do. '
+        + 'PT builds the hips and core back up so the back can relax. PT comes first every week.',
+    };
+    const PT_WHY = {
+      'Glute Max': 'Main hip extensor. Sitting all day weakens it, so the lower back takes over when you stand up, lift or hinge. Strong glutes = less low back strain.',
+      'Glute Med': 'Holds the pelvis level when you stand on one leg (every step). When it is weak, the hip drops and the QL hikes it back up — a big reason the right QL stays tight. The main rehab target.',
+      'Hamstrings': 'Teaches a clean hip hinge, so bending and lifting come from the hips, not the low back. Single-leg versions also make glute med work for balance.',
+      'Quads': 'Single-leg strength and knee control. Split squats also stretch the back leg\'s hip flexor, which gets tight from sitting.',
+      'Core': 'Keeps the spine still while arms and legs move (anti-extension and anti-rotation), so the low back and QL don\'t have to brace for everything.',
+    };
+    let whyOpen = true;
+    try { whyOpen = localStorage.getItem('whyOpen') !== '0'; } catch (e) {}
+
+    function whySection(sections) {
+      const pt = (sections.find(s => s.name === 'PT') || { exercises: [] }).exercises;
+      const secEl = el('section', 'section wide summary why');
+      secEl.id = 'why-sec';
+      const head = el('div', 'section-head');
+      const name = el('span', 'section-name', 'Why PT');
+      name.append(el('span', 'chev', whyOpen ? ' ▾' : ' ▸'));
+      head.append(name, el('span', 'section-count', 'low back · QL · glutes'));
+      head.style.cursor = 'pointer';
+      head.addEventListener('click', () => {
+        whyOpen = !whyOpen;
+        try { localStorage.setItem('whyOpen', whyOpen ? '1' : '0'); } catch (e) {}
+        render();
+      });
+      secEl.append(head);
+      secEl.append(sumLine(whyOpen ? PT_WHY_GOAL : { head: PT_WHY_GOAL.head }));
+      if (!whyOpen) return secEl;
+      const groups = [];
+      pt.forEach(ex => { if (!groups.includes(ex.group)) groups.push(ex.group); });
+      groups.forEach(g => {
+        const names = pt.filter(ex => ex.group === g).map(ex => ex.name).join(', ');
+        const sub = el('div', 'sub');
+        sub.append(el('span', '', g), el('span', 'sub-rest', names));
+        secEl.append(sub);
+        secEl.append(sumLine({ head: '', body: PT_WHY[g] || 'No reason written yet.' }));
+      });
+      return boxGroups(secEl);
+    }
+
     function summarySection(sections) {
       const sum = weekSummary(sections);
       const secEl = el('section', 'section wide summary');
@@ -1937,6 +1989,7 @@
       if (sortMode === 'category' || sortMode === 'days') {
         const base = buildSections();
         const planned = plannedExercises(base);
+        wrap.append(whySection(base));
         wrap.append(summarySection(base));
         wrap.append(sectionEl({ id: 'today-sec', name: 'Today', exercises: planned, wide: true, focus: true,
           emptyText: 'Nothing planned yet. Tick suggestions below, or tap + Today on any exercise.' }));

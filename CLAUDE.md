@@ -99,6 +99,10 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - Picks are optimistic: `savePicks()` sets `data.picks` and re-renders immediately, then the server copy replaces it (failure restores the old picks), so + Today / + Next show at once.
 - Pick view (`view === 'pick'`, `pickView`) Pick view hides the jump buttons and shows only three compact sections of one-line `pv-row`s, no logging: **Today** (`→ Next` / `✕` on picked items), **Up next** (`+ Today` / `✕`), **Suggested** (PT block + area blocks, each row with `+ Today` / `+ Next` via `quickAdd`; done-today items hidden). Code: `pickViewSections()`; `render()` returns early when `pickView` is on.
 
+## Why PT (2026-10-25)
+
+- Full view only: a collapsible "Why PT" panel at the very top, above This week (`whySection()`, folded state in localStorage `whyOpen`; folded = goal line only). Goal line `PT_WHY_GOAL` (take load off the lower back: tight low back, hip flexors and right-side QL from sitting; weak glutes/glute med make the QL compensate). Then one block per PT muscle group (column A, sheet order) listing its exercises and the reason from `PT_WHY` (Glute Max, Glute Med, Hamstrings, Quads, Core). Edit the text in those two constants. Julius's rehab context: QL and glute medius issues.
+
 ## This week summary (2026-10-25)
 
 - "This week" card at the very top (`summarySection()` / `weekSummary()`, above Today; collapsible, folded state in localStorage `summaryOpen`, folded = top suggestion only). Two parts, rule-based, no AI:
