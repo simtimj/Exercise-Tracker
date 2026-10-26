@@ -622,11 +622,15 @@
     /* Compact grid (2026-10-26, Julius: too much empty space): names sit in one
        fixed-width column so every exercise's cells start right after its name
        and line up across all groups; groups are sized to their content. */
-    .pt-groups { grid-template-columns: repeat(2, max-content); justify-content: start; column-gap: 22px; }
-    .pt-grp.labeled { align-items: start; }
-    .pt-grp.labeled .pt-grp-head { gap: 8px; }
+    /* Fill the width (2026-10-26, Julius: right side empty on phone, all crammed
+       left on tablet): as many equal columns as fit — 3 on a phone, more on a
+       tablet. No full-row solo groups here, so nothing leaves a gap. */
+    .pt-groups { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); column-gap: 10px; row-gap: 8px; }
+    .pt-grp.solo { grid-column: auto; }
+    .pt-grp.labeled { align-items: stretch; }
+    .pt-grp.labeled .pt-grp-head { gap: 6px; }
     .pt-grp.labeled .pt-grp-name { flex: 0 1 auto; }
-    .gx-name { flex: 0 0 5.8em; }
+    .gx-name { flex: 0 0 5.4em; }
     .pt-detail {
       margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
       background: var(--card); font-size: 13px;
