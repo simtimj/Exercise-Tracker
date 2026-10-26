@@ -517,6 +517,17 @@
     @media (prefers-color-scheme: dark) { .pt-count .started { color: hsl(40 65% 62%); } }
     /* Bonus line: same shape, quieter — optional, not a to-do. */
     .pt-line.bonus { margin-top: 6px; font-weight: 500; color: var(--muted); }
+    /* Per muscle group breakdown under the PT total: two columns of mini bars. */
+    .pt-groups {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px;
+      margin-top: 6px; font-size: 11px; color: var(--muted);
+    }
+    .pt-grp { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .pt-grp-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 6.2em; flex-shrink: 0; }
+    .pt-grp .seg { height: 7px; }
+    .pt-grp-n { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .pt-grp.partial .pt-grp-name { color: var(--text); }
+    .pt-grp.met { opacity: 0.7; }
     .pt-chips {
       display: flex; gap: 6px; margin-top: 6px;
       overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
@@ -1690,6 +1701,26 @@
       count.title = 'Sessions this week (exercises done 2–3× a week count each time)';
       line.append(el('span', 'pt-label', 'PT this week'), bar, count);
       strip.append(line);
+
+      // Breakdown by muscle group (column A: Glute Max, Glute Med, Hamstrings,
+      // Quads, Core…), sheet order, same session math as the total above.
+      const groups = [];
+      pt.forEach(ex => { if (!groups.includes(ex.group)) groups.push(ex.group); });
+      const grid = el('div', 'pt-groups');
+      groups.forEach(g => {
+        const list = pt.filter(ex => ex.group === g);
+        const done = list.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0);
+        const total = list.reduce((n, ex) => n + ex.weekTarget, 0);
+        const cells = [];
+        list.forEach(ex => { for (let i = 0; i < ex.weekTarget; i++) cells.push(i < ex.weekDone ? 1 : 0); });
+        const allMet = done >= total;
+        const row = el('div', 'pt-grp' + (allMet ? ' met' : done ? ' partial' : ''));
+        row.title = list.map(ex => ex.name + ' ' + Math.min(ex.weekDone, ex.weekTarget) + '/' + ex.weekTarget).join('\n');
+        row.append(el('span', 'pt-grp-name', (allMet ? '✓ ' : '') + g), segBar(cells, allMet ? 'all' : ''),
+          el('span', 'pt-grp-n', done + '/' + total));
+        grid.append(row);
+      });
+      strip.append(grid);
 
       const chips = el('div', 'pt-chips');
       pt.slice()
