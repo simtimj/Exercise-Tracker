@@ -739,7 +739,6 @@
       <h1>Exercise Tracker</h1>
       <div id="status">Loading…</div>
       <div class="view-tabs" id="view-tabs">
-        <button class="notes-btn" data-view="today" type="button">Today</button>
         <button class="notes-btn" data-view="pick" type="button">Simple</button>
         <button class="notes-btn" data-view="full" type="button">Full</button>
       </div>
@@ -2123,7 +2122,9 @@
     try {
       view = localStorage.getItem('view') || (localStorage.getItem('pickView') === '1' ? 'pick' : 'full');
     } catch (e) {}
-    if (!['full', 'pick', 'today'].includes(view)) view = 'full';
+    // Today tab removed 2026-10-25 (nearly the same as Simple); old saved choice → Simple.
+    if (view === 'today') view = 'pick';
+    if (!['full', 'pick'].includes(view)) view = 'full';
     let pickView = view === 'pick';
     document.getElementById('view-tabs').addEventListener('click', e => {
       const v = e.target.dataset && e.target.dataset.view;
