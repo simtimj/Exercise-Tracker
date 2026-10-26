@@ -72,7 +72,15 @@
       gap: 8px;
     }
 
-    h1 { font-size: 18px; margin: 0; flex: 1; }
+    h1 { font-size: 18px; margin: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .refresh-btn {
+      flex: 0 0 auto; margin-right: auto;
+      width: 30px; height: 30px; padding: 0; border-radius: 50%;
+      border: 1px solid var(--border); background: var(--card); color: var(--text);
+      font-size: 16px; line-height: 1; cursor: pointer;
+    }
+    .refresh-btn.spin { animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     #status { color: var(--muted); font-size: 12px; text-align: right; }
 
@@ -613,6 +621,10 @@
       overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
     }
     .pt-chips::-webkit-scrollbar { display: none; }
+    .pt-chips-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .pt-chips-row .pt-chips { margin-top: 0; flex: 1; min-width: 0; }
+    .pt-chips-label { flex: 0 0 auto; font-size: 11px; font-weight: 600; color: var(--muted); line-height: 1.15; }
+    .pt-detail-row.flash { animation: flash 1.2s ease-out; border-radius: 6px; }
     .chip {
       flex: 0 0 auto;
       display: flex; align-items: center; gap: 4px;
@@ -747,6 +759,7 @@
   <div class="top">
     <header>
       <h1>Exercise Tracker</h1>
+      <button class="refresh-btn" id="refresh-btn" type="button" title="Refresh" aria-label="Refresh">↻</button>
       <div id="status">Loading…</div>
       <div class="view-tabs" id="view-tabs">
         <button class="notes-btn" data-view="pick" type="button">Simple</button>
@@ -1919,7 +1932,7 @@
     // Groups are laid out by body part: names in `order` sit two per row,
     // names in `solo` get a row to themselves. Unknown groups go last.
     const GRID_LAYOUT = {
-      PT: { order: ['Glute Med', 'Glute Max', 'Quads', 'Hamstrings', 'Core'], solo: ['Core'] },
+      PT: { order: ['Core', 'Glute Max', 'Glute Med', 'Hamstrings', 'Quads'], solo: ['Core'] },
       Compound: { order: ['Lats', 'Upper Back', 'Chest', 'Shoulders', 'Quads'], solo: ['Quads'] },
       Isolation: { order: ['Upper Abs', 'Middle Abs', 'Lower Abs', 'Obliques', 'Biceps', 'Triceps',
         'Shoulders', 'Rear Delts', 'Upper Back', 'Calves'], solo: [] },
@@ -1990,6 +2003,7 @@
       box.append(head);
       const line = ex => {
         const r = el('div', 'pt-detail-row' + (ex.met ? ' met' : ''));
+        r.dataset.key = ex.key;
         const f = freshOf(ex.days, ex.recoveryDays);
         const txt = el('span', 'pt-detail-text');
         const owe = ex.weekTarget - Math.min(ex.weekDone, ex.weekTarget);
@@ -2101,11 +2115,22 @@
             chip.title = ex.name;
             chip.append(el('span', 'chip-name', (ex.met ? '✓ ' : '') + ex.name),
               el('span', 'chip-n', ex.weekDone + '/' + ex.weekTarget));
-            chip.addEventListener('click', () => jumpTo(ex.key));
+            chip.addEventListener('click', () => openInGrid(ex));
             chips.append(chip);
           });
-        strip.append(chips);
+        const row = el('div', 'pt-chips-row');
+        row.append(el('span', 'pt-chips-label', 'Suggested PT'), chips);
+        strip.append(row);
       }
+    }
+
+    // Chip tap: open the exercise's muscle group in the grid panel above and flash its row.
+    function openInGrid(ex) {
+      gridCat = 'PT';
+      gridOpen = ex.group;
+      render();
+      const r = [...document.querySelectorAll('#pt-strip .pt-detail-row')].find(x => x.dataset.key === ex.key);
+      if (r) { r.classList.remove('flash'); void r.offsetWidth; r.classList.add('flash'); }
     }
 
     function jumpTo(key) {
@@ -2441,14 +2466,24 @@
         .addNote(text);
     });
 
-    google.script.run
-      .withSuccessHandler(result => {
-        data = result;
-        setStatus(mergeDupes(sheetRows()).length + ' exercises');
-        render();
-      })
-      .withFailureHandler(err => setStatus('Error: ' + err.message))
-      .getTrackerData();
+    // Load (and reload) the sheet data. The ↻ button next to the title calls this.
+    function loadData() {
+      const btn = document.getElementById('refresh-btn');
+      btn.classList.add('spin');
+      btn.disabled = true;
+      const done = () => { btn.classList.remove('spin'); btn.disabled = false; };
+      google.script.run
+        .withSuccessHandler(result => {
+          data = result;
+          setStatus(mergeDupes(sheetRows()).length + ' exercises');
+          render();
+          done();
+        })
+        .withFailureHandler(err => { setStatus('Error: ' + err.message); done(); })
+        .getTrackerData();
+    }
+    document.getElementById('refresh-btn').addEventListener('click', () => { setStatus('Refreshing…'); loadData(); });
+    loadData();
   </script>
 </body>
 
