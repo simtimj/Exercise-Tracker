@@ -207,6 +207,7 @@
     }
     .pick-row .thumb { width: 32px; height: 32px; border-radius: 6px; }
     .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .thumb.drawn img { object-fit: contain; }
     .thumb.none { cursor: default; border-style: dashed; background: transparent; }
     .pic-shade {
       position: fixed; inset: 0; z-index: 50; background: rgb(0 0 0 / 0.55);
@@ -552,6 +553,34 @@
       padding: 3px 4px; margin: -3px -4px; cursor: pointer;
     }
     .pt-grp.solo { grid-column: 1 / -1; }
+    .pt-grp-name { display: flex; align-items: center; gap: 5px; }
+    /* Freshness dots: red = just done, yellow = ready, green = falling behind. */
+    .fdot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .fdot.f-red { background: hsl(0 65% 55%); }
+    .fdot.f-yellow { background: hsl(44 85% 52%); }
+    .fdot.f-green { background: hsl(135 50% 42%); }
+    .pt-grp.f-green:not(.met) .pt-grp-name { color: var(--text); font-weight: 600; }
+    .pt-grp.f-red .pt-grp-name { opacity: 0.8; }
+    .fresh-key { display: flex; gap: 12px; margin-top: 5px; font-size: 10.5px; color: var(--muted); }
+    .fresh-key span { display: flex; align-items: center; gap: 4px; }
+    .grid-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+    .grid-tab {
+      font: inherit; font-size: 11.5px; padding: 3px 9px; border-radius: 999px; cursor: pointer;
+      border: 1px solid var(--border); background: transparent; color: var(--muted);
+      display: flex; gap: 5px; align-items: center;
+    }
+    .grid-tab.active { background: var(--soft); color: var(--text); font-weight: 600; border-color: var(--muted); }
+    .grid-tab-n { font-variant-numeric: tabular-nums; opacity: 0.8; }
+    .pt-total {
+      width: 100%; font: inherit; font-size: 12px; font-weight: 600; color: inherit; text-align: left;
+      background: transparent; border: 1px solid transparent; border-radius: 6px;
+      padding: 3px 4px; margin: -3px -4px; cursor: pointer; box-sizing: border-box; width: calc(100% + 8px);
+    }
+    .pt-total.open { border-color: var(--border); background: var(--soft); }
+    .pt-detail-sub { display: flex; align-items: center; gap: 5px; }
+    .pt-detail-row .fdot { margin-right: 2px; }
+    .pt-detail-row .thumb { width: 30px; height: 30px; border-radius: 6px; }
+    .pt-detail-text { flex: 1; }
     .pt-grp.open { border-color: var(--border); background: var(--soft); }
     .pt-grp-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 6.2em; flex-shrink: 0; }
     .pt-grp .seg { height: 7px; }
@@ -1724,17 +1753,29 @@
     // Key = start of the exercise name (lowercase), value = that db's exercise id
     // (or a full https URL to use your own picture). Empty = no good match yet.
     // Julius will swap any that look wrong.
+    // Simple line drawings (made here, no license needed) for exercises the
+    // photo set doesn't have. Start, end.
+    const DRAWN_IMAGES = {
+      bird_dog: [
+        'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140"><rect width="200" height="140" fill="%23f3f1f7"/><line x1="8" y1="118" x2="192" y2="118" stroke="%23c9c3d6" stroke-width="3" stroke-linecap="round"/><g fill="none" stroke="%233b3550" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><g stroke="%239a92b0"><polyline points="128,66 129,114"/><polyline points="80,66 82,114 46,114"/></g><polyline points="72,66 135,66"/><circle cx="152" cy="58" r="10" fill="%233b3550" stroke="none"/><polyline points="135,66 137,114"/><polyline points="72,66 74,114 38,114"/></g></svg>',
+        'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140"><rect width="200" height="140" fill="%23f3f1f7"/><line x1="8" y1="118" x2="192" y2="118" stroke="%23c9c3d6" stroke-width="3" stroke-linecap="round"/><g fill="none" stroke="%233b3550" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><g stroke="%239a92b0"><polyline points="128,66 129,114"/><polyline points="80,66 82,114 46,114"/></g><polyline points="72,66 135,66"/><circle cx="150" cy="52" r="10" fill="%233b3550" stroke="none"/><polyline points="135,66 190,72"/><polyline points="72,66 14,60"/></g></svg>',
+      ],
+      clam_shells: [
+        'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140"><rect width="200" height="140" fill="%23f3f1f7"/><line x1="8" y1="118" x2="192" y2="118" stroke="%23c9c3d6" stroke-width="3" stroke-linecap="round"/><g fill="none" stroke="%233b3550" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><circle cx="28" cy="96" r="10" fill="%233b3550" stroke="none"/><polyline points="44,104 36,116"/><polyline points="44,104 112,104"/><g stroke="%239a92b0"><polyline points="112,108 162,96 122,114"/></g><polyline points="112,104 162,92 122,112"/></g></svg>',
+        'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140"><rect width="200" height="140" fill="%23f3f1f7"/><line x1="8" y1="118" x2="192" y2="118" stroke="%23c9c3d6" stroke-width="3" stroke-linecap="round"/><g fill="none" stroke="%233b3550" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><circle cx="28" cy="96" r="10" fill="%233b3550" stroke="none"/><polyline points="44,104 36,116"/><polyline points="44,104 112,104"/><g stroke="%239a92b0"><polyline points="112,108 162,96 122,114"/></g><polyline points="112,104 150,52 122,110"/></g></svg>',
+      ],
+    };
     const IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
     const EX_IMAGES = {
       '1 leg weighted glute bridge': 'Single_Leg_Glute_Bridge',
       'side lying hip abduction': 'Side_Leg_Raises',
       'lateral band walks': 'Monster_Walk',
-      'clam shells': '',
+      'clam shells': DRAWN_IMAGES.clam_shells,
       'romanian deadlift': 'Romanian_Deadlift',
       'bulgarian split squat': 'Split_Squat_with_Dumbbells',
       'weighted step ups': 'Dumbbell_Step_Ups',
       'dead bugs': 'Dead_Bug',
-      'bird dog': '',
+      'bird dog': DRAWN_IMAGES.bird_dog,
       'pull ups': 'Pullups',
       'barbell row': 'Bent_Over_Barbell_Row',
       'one-arm dumbbell row': 'One-Arm_Dumbbell_Row',
@@ -1762,6 +1803,7 @@
       const k = keys.find(k => n.startsWith(k)) || keys.find(k => n.includes(k));
       const v = k ? EX_IMAGES[k] : '';
       if (!v) return null;
+      if (Array.isArray(v)) return v;
       if (/^https?:/.test(v)) return [v];
       return [IMG_BASE + v + '/0.jpg', IMG_BASE + v + '/1.jpg']; // start, end positions
     }
@@ -1775,6 +1817,7 @@
         img.src = imgs[0];
         img.alt = '';
         img.loading = 'lazy';
+        if (imgs[0].startsWith('data:')) box.classList.add('drawn');
         img.onerror = () => { box.classList.add('none'); img.remove(); };
         box.append(img);
       } else box.title = 'No picture yet';
@@ -1863,135 +1906,197 @@
 
     // Pinned "PT this week" strip: progress bar + one chip per PT exercise,
     // still-to-do first. Tap a chip to jump to that exercise.
-    // PT grid layout: pairs that sit side by side, then singles on their own row.
-    const PT_GRID_ORDER = ['Glute Med', 'Glute Max', 'Quads', 'Hamstrings', 'Core'];
-    const PT_GRID_SOLO = ['Core'];
-    const gridRank = g => { const i = PT_GRID_ORDER.indexOf(g); return i < 0 ? 99 : i; };
-    let ptOpenGroup = null; // group whose details are showing under the grid
+    // ---------- This week grids: PT, Compound, Isolation (2026-10-25) ----------
+    // One grid per category, picked with the small tabs in the sticky header.
+    // Groups are laid out by body part: names in `order` sit two per row,
+    // names in `solo` get a row to themselves. Unknown groups go last.
+    const GRID_LAYOUT = {
+      PT: { order: ['Glute Med', 'Glute Max', 'Quads', 'Hamstrings', 'Core'], solo: ['Core'] },
+      Compound: { order: ['Lats', 'Upper Back', 'Chest', 'Shoulders', 'Quads'], solo: ['Quads'] },
+      Isolation: { order: ['Upper Abs', 'Middle Abs', 'Lower Abs', 'Obliques', 'Biceps', 'Triceps',
+        'Shoulders', 'Rear Delts', 'Upper Back', 'Calves'], solo: [] },
+    };
+    const GRID_CATS = ['PT', 'Compound', 'Isolation'];
+    let gridCat = 'PT';
+    try { gridCat = localStorage.getItem('gridCat') || 'PT'; } catch (e) {}
+    if (!GRID_CATS.includes(gridCat)) gridCat = 'PT';
+    let gridOpen = null; // null, '*' (the whole category) or a group name
 
-    // Details for one PT muscle group: what's left this week, then what's done.
-    function ptGroupDetail(g, pt) {
-      const list = pt.filter(ex => ex.group === g);
+    // Sessions this week: an exercise done 2×/wk counts twice.
+    const sessOf = list => ({
+      done: list.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0),
+      total: list.reduce((n, ex) => n + ex.weekTarget, 0),
+    });
+
+    function gridGroups(cat, list) {
+      const lay = GRID_LAYOUT[cat] || { order: [], solo: [] };
+      const rank = g => { const i = lay.order.indexOf(g); return i < 0 ? 99 : i; };
+      const groups = [];
+      list.forEach(ex => { if (!groups.includes(ex.group)) groups.push(ex.group); });
+      return groups.sort((x, y) => rank(x) - rank(y))
+        .map(g => ({ name: g, solo: lay.solo.includes(g), list: list.filter(ex => ex.group === g) }));
+    }
+
+    // Freshness, by days since vs the area's recovery days:
+    //   red    = just trained, still recovering — leave it
+    //   yellow = recovered, fine to do
+    //   green  = going stale / falling behind — do this one
+    function freshOf(days, rec) {
+      rec = rec || 2;
+      if (days < rec) return { cls: 'f-red', label: days === 0 ? 'done today' : 'resting' };
+      if (days < Math.max(rec * 2, rec + 2)) return { cls: 'f-yellow', label: 'ready' };
+      return { cls: 'f-green', label: 'falling behind' };
+    }
+    const freshDot = f => { const d = el('span', 'fdot ' + f.cls); d.title = f.label; return d; };
+    const groupFresh = list => {
+      const days = Math.min(...list.map(ex => ex.days));
+      return Object.assign(freshOf(days, list[0].recoveryDays), { days });
+    };
+
+    // One cluster per exercise, one box per session in its weekly goal.
+    function clusterBar(list, allMet) {
+      const bar = el('div', 'seg-bar clusters' + (allMet ? ' all' : ''));
+      list.forEach(ex => {
+        const c = el('span', 'seg-cluster');
+        c.style.setProperty('--n', ex.weekTarget);
+        for (let i = 0; i < ex.weekTarget; i++) c.append(el('span', 'seg' + (i < ex.weekDone ? ' full' : '')));
+        bar.append(c);
+      });
+      return bar;
+    }
+
+    // Details panel under the grid: one group, or the whole category ('*').
+    function gridDetail(cat, groups) {
       const box = el('div', 'pt-detail');
       const head = el('div', 'pt-detail-head');
-      const done = list.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0);
-      const total = list.reduce((n, ex) => n + ex.weekTarget, 0);
-      head.append(el('span', 'pt-detail-title', g + ' · ' + done + ' of ' + total + ' this week'));
+      const shown = gridOpen === '*' ? groups : groups.filter(g => g.name === gridOpen);
+      const all = [].concat(...shown.map(g => g.list));
+      const t = sessOf(all);
+      head.append(el('span', 'pt-detail-title', (gridOpen === '*' ? 'All ' + cat : gridOpen)
+        + ' · ' + t.done + ' of ' + t.total + ' this week'));
       const close = el('button', 'q-btn', '✕');
       close.type = 'button';
       close.title = 'Close';
-      close.addEventListener('click', () => { ptOpenGroup = null; render(); });
+      close.addEventListener('click', () => { gridOpen = null; render(); });
       head.append(close);
       box.append(head);
-      const left = list.filter(ex => !ex.met);
-      const met = list.filter(ex => ex.met);
-      const line = (ex, isLeft) => {
-        const r = el('div', 'pt-detail-row' + (isLeft ? '' : ' met'));
+      const line = ex => {
+        const r = el('div', 'pt-detail-row' + (ex.met ? ' met' : ''));
+        const f = freshOf(ex.days, ex.recoveryDays);
         const txt = el('span', 'pt-detail-text');
         const owe = ex.weekTarget - Math.min(ex.weekDone, ex.weekTarget);
-        txt.append(el('span', 'pt-detail-name', (isLeft ? '' : '✓ ') + ex.name),
+        txt.append(el('span', 'pt-detail-name', (ex.met ? '✓ ' : '') + ex.name),
           el('span', 'pt-detail-meta', ex.weekDone + '/' + ex.weekTarget
-            + (isLeft ? ' · ' + owe + ' left' : ' · done') + ' · ' + (ex.noDate ? 'no date' : daysLabel(ex.days))));
-        r.append(txt);
-        if (isLeft && !isDoneToday(ex)) r.append(quickAdd(ex, true));
+            + (ex.met ? ' · done' : ' · ' + owe + ' left') + ' · '
+            + (ex.noDate ? 'no date' : daysLabel(ex.days)) + ' · ' + f.label));
+        r.append(freshDot(f), exThumb(ex), txt);
+        if (!ex.met && !isDoneToday(ex)) r.append(quickAdd(ex, true));
         return r;
       };
-      if (left.length) {
-        box.append(el('div', 'pt-detail-sub', 'Left'));
-        left.forEach(ex => box.append(line(ex, true)));
-      }
-      if (met.length) {
-        box.append(el('div', 'pt-detail-sub', 'Done'));
-        met.forEach(ex => box.append(line(ex, false)));
-      }
-      if (PT_WHY[g]) box.append(el('div', 'pt-detail-why', PT_WHY[g]));
+      shown.forEach(g => {
+        const gs = sessOf(g.list);
+        const gf = groupFresh(g.list);
+        if (gridOpen === '*') {
+          const sub = el('div', 'pt-detail-sub');
+          sub.append(freshDot(gf), document.createTextNode(g.name + ' · ' + gs.done + '/' + gs.total + ' · ' + gf.label));
+          box.append(sub);
+          // What's left first, then what's done.
+          g.list.filter(ex => !ex.met).concat(g.list.filter(ex => ex.met)).forEach(ex => box.append(line(ex)));
+        } else {
+          const left = g.list.filter(ex => !ex.met);
+          const met = g.list.filter(ex => ex.met);
+          if (left.length) { box.append(el('div', 'pt-detail-sub', 'Left')); left.forEach(ex => box.append(line(ex))); }
+          if (met.length) { box.append(el('div', 'pt-detail-sub', 'Done')); met.forEach(ex => box.append(line(ex))); }
+          if (cat === 'PT' && PT_WHY[g.name]) box.append(el('div', 'pt-detail-why', PT_WHY[g.name]));
+        }
+      });
       return box;
     }
 
     function renderPtStrip(sections) {
       const strip = document.getElementById('pt-strip');
       strip.innerHTML = '';
-      const pt = (sections.find(s => s.name === 'PT') || { exercises: [] }).exercises;
-      if (!pt.length) return;
-      const met = pt.filter(ex => ex.met).length;
+      const byCat = Object.fromEntries(GRID_CATS.map(c => [c, (sections.find(x => x.name === c) || { exercises: [] }).exercises]));
+      if (!byCat.PT.length && !byCat.Compound.length && !byCat.Isolation.length) return;
 
-      // One box per PT exercise: full = weekly goal met, partly filled =
-      // started but not there yet. Count = full boxes.
-      const line = el('div', 'pt-line');
-      const bar = segBar(pt.map(ex => Math.min(1, ex.weekDone / ex.weekTarget)), met === pt.length ? 'all' : '');
-      // "0/9 done · 3 started" so the amber half-boxes are explained.
-      const started = pt.filter(ex => !ex.met && ex.weekDone > 0).length;
-      // Counted in sessions: an exercise done 2×/wk counts 2 toward the total.
-      const sessDone = pt.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0);
-      const sessTotal = pt.reduce((n, ex) => n + ex.weekTarget, 0);
-      const count = el('span', 'pt-count');
-      count.textContent = met === pt.length ? 'all done ✓' : sessDone + '/' + sessTotal + ' done';
-      count.title = 'Sessions this week (exercises done 2–3× a week count each time)';
-      line.append(el('span', 'pt-label', 'PT this week'), bar, count);
-      strip.append(line);
-
-      // Breakdown by muscle group (column A), laid out by body part:
-      // Glute Med | Glute Max, Quads | Hamstrings, Core on its own row.
-      // Same session math as the total above. Tap a group to see what's
-      // done and what's left, with + Today / + Next right there.
-      const groups = [];
-      pt.forEach(ex => { if (!groups.includes(ex.group)) groups.push(ex.group); });
-      groups.sort((a, b) => gridRank(a) - gridRank(b));
-      const grid = el('div', 'pt-groups');
-      groups.forEach(g => {
-        const list = pt.filter(ex => ex.group === g);
-        const done = list.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0);
-        const total = list.reduce((n, ex) => n + ex.weekTarget, 0);
-        const allMet = done >= total;
-        // One little cluster per exercise, one box per session in its weekly
-        // goal — so Core 1/4 reads as [■□] [□□]: two exercises, twice each.
-        const bar = el('div', 'seg-bar clusters' + (allMet ? ' all' : ''));
-        list.forEach(ex => {
-          const c = el('span', 'seg-cluster');
-          c.style.setProperty('--n', ex.weekTarget);
-          for (let i = 0; i < ex.weekTarget; i++) c.append(el('span', 'seg' + (i < ex.weekDone ? ' full' : '')));
-          bar.append(c);
-        });
-        const row = el('button', 'pt-grp' + (allMet ? ' met' : done ? ' partial' : '')
-          + (PT_GRID_SOLO.includes(g) ? ' solo' : '') + (ptOpenGroup === g ? ' open' : ''));
-        row.type = 'button';
-        row.append(el('span', 'pt-grp-name', (allMet ? '✓ ' : '') + g), bar,
-          el('span', 'pt-grp-n', done + '/' + total));
-        row.addEventListener('click', () => {
-          ptOpenGroup = ptOpenGroup === g ? null : g;
+      // Tabs: PT · Compound · Isolation, each with its session count.
+      const tabs = el('div', 'grid-tabs');
+      GRID_CATS.forEach(c => {
+        if (!byCat[c].length) return;
+        const t = sessOf(byCat[c]);
+        const b = el('button', 'grid-tab' + (c === gridCat ? ' active' : ''));
+        b.type = 'button';
+        b.append(el('span', '', c), el('span', 'grid-tab-n', t.done + '/' + t.total));
+        b.addEventListener('click', () => {
+          if (c === gridCat) return;
+          gridCat = c;
+          gridOpen = null;
+          try { localStorage.setItem('gridCat', c); } catch (e) {}
           render();
         });
+        tabs.append(b);
+      });
+      strip.append(tabs);
+
+      const list = byCat[gridCat];
+      if (!list.length) return;
+      const metAll = list.every(ex => ex.met);
+      const t = sessOf(list);
+
+      // Total line — tap for every exercise in this category, grouped.
+      const line = el('button', 'pt-line pt-total' + (gridOpen === '*' ? ' open' : ''));
+      line.type = 'button';
+      line.title = 'Show all ' + gridCat;
+      const bar = segBar(list.map(ex => Math.min(1, ex.weekDone / ex.weekTarget)), metAll ? 'all' : '');
+      const count = el('span', 'pt-count', metAll ? 'all done ✓' : t.done + '/' + t.total + ' done');
+      line.append(el('span', 'pt-label', gridCat + ' this week'), bar, count);
+      line.addEventListener('click', () => { gridOpen = gridOpen === '*' ? null : '*'; render(); });
+      strip.append(line);
+
+      // Muscle group grid — tap a group for what's left and what's done.
+      const groups = gridGroups(gridCat, list);
+      const grid = el('div', 'pt-groups');
+      groups.forEach(g => {
+        const s2 = sessOf(g.list);
+        const allMet = s2.done >= s2.total;
+        const f = groupFresh(g.list);
+        const row = el('button', 'pt-grp ' + f.cls + (allMet ? ' met' : s2.done ? ' partial' : '')
+          + (g.solo ? ' solo' : '') + (gridOpen === g.name ? ' open' : ''));
+        row.type = 'button';
+        row.title = g.name + ' · ' + f.label + (f.days >= 30 ? '' : ' · last ' + daysLabel(f.days));
+        const name = el('span', 'pt-grp-name');
+        name.append(freshDot(f), document.createTextNode((allMet ? '✓ ' : '') + g.name));
+        row.append(name, clusterBar(g.list, allMet), el('span', 'pt-grp-n', s2.done + '/' + s2.total));
+        row.addEventListener('click', () => { gridOpen = gridOpen === g.name ? null : g.name; render(); });
         grid.append(row);
       });
       strip.append(grid);
-      if (ptOpenGroup && groups.includes(ptOpenGroup)) strip.append(ptGroupDetail(ptOpenGroup, pt));
-      else ptOpenGroup = null;
+      const legend = el('div', 'fresh-key');
+      [['f-red', 'just done'], ['f-yellow', 'ready'], ['f-green', 'falling behind']].forEach(([c, l]) => {
+        const k = el('span', '');
+        k.append(freshDot({ cls: c, label: l }), document.createTextNode(l));
+        legend.append(k);
+      });
+      strip.append(legend);
+      if (gridOpen && (gridOpen === '*' || groups.some(g => g.name === gridOpen))) strip.append(gridDetail(gridCat, groups));
+      else gridOpen = null;
 
-      const chips = el('div', 'pt-chips');
-      pt.slice()
-        .sort((a, b) => a.met - b.met || a.weekDone / a.weekTarget - b.weekDone / b.weekTarget
-          || b.days - a.days || a.firstRow - b.firstRow)
-        .forEach(ex => {
-          const chip = el('button', 'chip' + (ex.met ? ' met' : ex.weekDone ? ' partial' : ''));
-          chip.type = 'button';
-          chip.title = ex.name;
-          chip.append(el('span', 'chip-name', (ex.met ? '✓ ' : '') + ex.name),
-            el('span', 'chip-n', ex.weekDone + '/' + ex.weekTarget));
-          chip.addEventListener('click', () => jumpTo(ex.key));
-          chips.append(chip);
-        });
-      strip.append(chips);
-
-      // Bonus: everything that isn't PT. Nice to have, not required.
-      const extra = [].concat(...sections.filter(s => s.name !== 'PT').map(s => s.exercises));
-      // Bonus only appears once every PT exercise has met its weekly goal.
-      if (extra.length && met === pt.length) {
-        const hit = extra.filter(ex => ex.weekDone > 0).length;
-        const bLine = el('div', 'pt-line bonus');
-        const bBar = segBar(extra.map(ex => (ex.weekDone > 0 ? 1 : 0)), 'blue');
-        bLine.append(el('span', 'pt-label', 'Bonus'), bBar,
-          el('span', 'pt-count', hit ? '+' + hit + ' of ' + extra.length : '0 of ' + extra.length));
-        strip.append(bLine);
+      // PT keeps its one-chip-per-exercise row.
+      if (gridCat === 'PT') {
+        const chips = el('div', 'pt-chips');
+        list.slice()
+          .sort((a, b) => a.met - b.met || a.weekDone / a.weekTarget - b.weekDone / b.weekTarget
+            || b.days - a.days || a.firstRow - b.firstRow)
+          .forEach(ex => {
+            const chip = el('button', 'chip' + (ex.met ? ' met' : ex.weekDone ? ' partial' : ''));
+            chip.type = 'button';
+            chip.title = ex.name;
+            chip.append(el('span', 'chip-name', (ex.met ? '✓ ' : '') + ex.name),
+              el('span', 'chip-n', ex.weekDone + '/' + ex.weekTarget));
+            chip.addEventListener('click', () => jumpTo(ex.key));
+            chips.append(chip);
+          });
+        strip.append(chips);
       }
     }
 
