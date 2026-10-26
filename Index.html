@@ -2684,6 +2684,8 @@
       if (loc && loc.parameter && loc.parameter.wrap) refreshBtn.href = WRAP_URL;
       else google.script.run.withSuccessHandler(url => { if (url) refreshBtn.href = url; }).getAppUrl();
     });
+    // Tell the banner-free wrapper the app loaded (it shows a fallback if this never arrives).
+    try { window.top.postMessage('exercise-tracker-loaded', '*'); } catch (e) {}
     loadData();
   </script>
 </body>
