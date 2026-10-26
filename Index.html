@@ -198,7 +198,26 @@
 
     .ex.done { opacity: 0.75; }
 
-    .ex-name { font-size: 15px; font-weight: 600; line-height: 1.25; }
+    .ex-name { font-size: 15px; font-weight: 600; line-height: 1.25; display: flex; align-items: center; gap: 10px; }
+    .ex-name .pick { display: flex; align-items: center; gap: 8px; }
+    /* Exercise picture: small square left of the name; tap for start/end. */
+    .thumb {
+      flex: 0 0 auto; width: 40px; height: 40px; border-radius: 8px; overflow: hidden;
+      background: var(--soft); border: 1px solid var(--border); cursor: zoom-in;
+    }
+    .pick-row .thumb { width: 32px; height: 32px; border-radius: 6px; }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .thumb.none { cursor: default; border-style: dashed; background: transparent; }
+    .pic-shade {
+      position: fixed; inset: 0; z-index: 50; background: rgb(0 0 0 / 0.55);
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .pic-card { background: var(--card); color: var(--text); border-radius: 12px; padding: 12px; max-width: 520px; width: 100%; }
+    .pic-title { font-weight: 600; margin-bottom: 8px; }
+    .pic-row { display: flex; gap: 8px; }
+    .pic-row figure { margin: 0; flex: 1; min-width: 0; }
+    .pic-row img { width: 100%; border-radius: 8px; display: block; background: #fff; }
+    .pic-row figcaption { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
     .ex-meta { font-size: 12px; color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; grid-column: 1 / -1; }
     .ex-note { font-size: 12px; font-style: italic; color: var(--muted); grid-column: 1 / -1; }
 
@@ -536,6 +555,9 @@
     .pt-grp.open { border-color: var(--border); background: var(--soft); }
     .pt-grp-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 6.2em; flex-shrink: 0; }
     .pt-grp .seg { height: 7px; }
+    .seg-bar.clusters { gap: 5px; }
+    .seg-cluster { flex: var(--n, 1); display: flex; gap: 1px; min-width: 0; }
+    .seg-cluster .seg { flex: 1; }
     .pt-grp-n { white-space: nowrap; font-variant-numeric: tabular-nums; }
     .pt-grp.partial .pt-grp-name { color: var(--text); }
     .pt-grp.met { opacity: 0.7; }
@@ -575,7 +597,7 @@
     .chip.met { border-color: transparent; background: var(--soft); color: var(--muted); }
 
     /* PT cards: met ones get a check and step back so what's left stands out. */
-    .ex.met .ex-name::before { content: '✓ '; color: hsl(130 45% 40%); }
+    .ex.met .ex-name > :last-child::before { content: '✓ '; color: hsl(130 45% 40%); }
     .ex.met:not(.done) { opacity: 0.7; }
     .ex { scroll-margin-top: calc(var(--top-h, 180px) + 56px); }
     .ex.flash { animation: flash 1.2s ease-out; }
@@ -1237,7 +1259,7 @@
       row.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
       const txt = el('span', 'pr-text');
       txt.append(el('span', 'pr-name', (isDoneToday(ex) ? '✓ ' : '') + ex.name), el('span', 'pr-meta', metaText));
-      row.append(pickBox(ex), txt);
+      row.append(pickBox(ex), exThumb(ex), txt);
       if (!isDoneToday(ex)) row.append(quickAdd(ex, true));
       return row;
     }
@@ -1697,6 +1719,93 @@
       document.getElementById('status').textContent = text;
     }
 
+    // ---------- Exercise pictures (2026-10-25) ----------
+    // Public-domain photos from free-exercise-db (github.com/yuhonas/free-exercise-db).
+    // Key = start of the exercise name (lowercase), value = that db's exercise id
+    // (or a full https URL to use your own picture). Empty = no good match yet.
+    // Julius will swap any that look wrong.
+    const IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
+    const EX_IMAGES = {
+      '1 leg weighted glute bridge': 'Single_Leg_Glute_Bridge',
+      'side lying hip abduction': 'Side_Leg_Raises',
+      'lateral band walks': 'Monster_Walk',
+      'clam shells': '',
+      'romanian deadlift': 'Romanian_Deadlift',
+      'bulgarian split squat': 'Split_Squat_with_Dumbbells',
+      'weighted step ups': 'Dumbbell_Step_Ups',
+      'dead bugs': 'Dead_Bug',
+      'bird dog': '',
+      'pull ups': 'Pullups',
+      'barbell row': 'Bent_Over_Barbell_Row',
+      'one-arm dumbbell row': 'One-Arm_Dumbbell_Row',
+      'rear delt flys': 'Reverse_Flyes',
+      'squat': 'Barbell_Squat',
+      'walking lunge': 'Bodyweight_Walking_Lunge',
+      'bench press': 'Barbell_Bench_Press_-_Medium_Grip',
+      'incline bench press': 'Barbell_Incline_Bench_Press_-_Medium_Grip',
+      'dips': 'Dips_-_Chest_Version',
+      'overhead press': 'Standing_Military_Press',
+      'lateral raise': 'Side_Lateral_Raise',
+      'decline crunch': 'Decline_Crunch',
+      'ab wheel': 'Ab_Roller',
+      'plank': 'Plank',
+      'hanging knee raise': 'Hanging_Leg_Raise',
+      'side plank': 'Side_Bridge',
+      'bicep curl': 'Dumbbell_Bicep_Curl',
+      'triceps extension': 'Cable_Rope_Overhead_Triceps_Extension',
+      'weighted calf raise': 'Standing_Dumbbell_Calf_Raise',
+    };
+    // Longest key the name starts with; else longest key it contains.
+    function imageFor(name) {
+      const n = String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      const keys = Object.keys(EX_IMAGES).sort((a, b) => b.length - a.length);
+      const k = keys.find(k => n.startsWith(k)) || keys.find(k => n.includes(k));
+      const v = k ? EX_IMAGES[k] : '';
+      if (!v) return null;
+      if (/^https?:/.test(v)) return [v];
+      return [IMG_BASE + v + '/0.jpg', IMG_BASE + v + '/1.jpg']; // start, end positions
+    }
+
+    // Small picture left of the name; tap for start + end positions.
+    function exThumb(ex) {
+      const imgs = imageFor(ex.name);
+      const box = el('span', 'thumb' + (imgs ? '' : ' none'));
+      if (imgs) {
+        const img = el('img');
+        img.src = imgs[0];
+        img.alt = '';
+        img.loading = 'lazy';
+        img.onerror = () => { box.classList.add('none'); img.remove(); };
+        box.append(img);
+      } else box.title = 'No picture yet';
+      box.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (imgs) showPictures(ex.name, imgs);
+      });
+      return box;
+    }
+
+    function showPictures(name, imgs) {
+      const shade = el('div', 'pic-shade');
+      const card = el('div', 'pic-card');
+      card.append(el('div', 'pic-title', name));
+      const row = el('div', 'pic-row');
+      imgs.forEach((src, i) => {
+        const fig = el('figure');
+        const img = el('img');
+        img.src = src;
+        img.alt = name;
+        fig.append(img);
+        if (imgs.length > 1) fig.append(el('figcaption', '', i ? 'End' : 'Start'));
+        row.append(fig);
+      });
+      card.append(row);
+      shade.append(card);
+      shade.addEventListener('click', () => shade.remove());
+      document.body.append(shade);
+    }
+
     function exerciseCard(ex, showTags, pickable) {
       const card = el('div', 'ex' + ((ex.plan || ex.suggest) && isDoneToday(ex) ? ' done' : '')
         + (ex.category === 'PT' && ex.met ? ' met' : '') + (pickable && picked.has(ex.key) ? ' sel' : ''));
@@ -1704,11 +1813,12 @@
       card.dataset.area = ex.area || '';
       card.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
       const nameEl = el('div', 'ex-name');
+      nameEl.append(exThumb(ex));
       if (pickable) {
         const lab = el('label', 'pick');
         lab.append(pickBox(ex), document.createTextNode(ex.name));
         nameEl.append(lab);
-      } else nameEl.textContent = ex.name;
+      } else nameEl.append(el('span', '', ex.name));
       // Right column: days since, then the one-tap Today / Next buttons.
       const side = el('div', 'side');
       side.append(el('span', 'pill', ex.noDate ? 'no date' : daysLabel(ex.days)));
@@ -1832,13 +1942,20 @@
         const list = pt.filter(ex => ex.group === g);
         const done = list.reduce((n, ex) => n + Math.min(ex.weekDone, ex.weekTarget), 0);
         const total = list.reduce((n, ex) => n + ex.weekTarget, 0);
-        const cells = [];
-        list.forEach(ex => { for (let i = 0; i < ex.weekTarget; i++) cells.push(i < ex.weekDone ? 1 : 0); });
         const allMet = done >= total;
+        // One little cluster per exercise, one box per session in its weekly
+        // goal — so Core 1/4 reads as [■□] [□□]: two exercises, twice each.
+        const bar = el('div', 'seg-bar clusters' + (allMet ? ' all' : ''));
+        list.forEach(ex => {
+          const c = el('span', 'seg-cluster');
+          c.style.setProperty('--n', ex.weekTarget);
+          for (let i = 0; i < ex.weekTarget; i++) c.append(el('span', 'seg' + (i < ex.weekDone ? ' full' : '')));
+          bar.append(c);
+        });
         const row = el('button', 'pt-grp' + (allMet ? ' met' : done ? ' partial' : '')
           + (PT_GRID_SOLO.includes(g) ? ' solo' : '') + (ptOpenGroup === g ? ' open' : ''));
         row.type = 'button';
-        row.append(el('span', 'pt-grp-name', (allMet ? '✓ ' : '') + g), segBar(cells, allMet ? 'all' : ''),
+        row.append(el('span', 'pt-grp-name', (allMet ? '✓ ' : '') + g), bar,
           el('span', 'pt-grp-n', done + '/' + total));
         row.addEventListener('click', () => {
           ptOpenGroup = ptOpenGroup === g ? null : g;
@@ -1936,7 +2053,7 @@
       row.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
       const txt = el('span', 'pr-text');
       txt.append(el('span', 'pr-name', (isDoneToday(ex) ? '✓ ' : '') + ex.name), el('span', 'pr-meta', meta));
-      row.append(txt);
+      row.append(exThumb(ex), txt);
       if (buttons.length) {
         const box = el('div', 'quick compact');
         box.append(...buttons);
