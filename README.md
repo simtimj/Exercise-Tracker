@@ -31,7 +31,7 @@ Last updated: 2026-10-26
 **This week grids** (sticky, the center of the app)
 - Tabs PT · Compound · Isolation with session counts; grid of muscle groups by body part, one box per session.
 - Freshness dots: red = just done / resting, yellow = ready, green = falling behind (do this one).
-- Tap the total line for all exercises, or a group for just that group (with + Today / + Next). PT keeps a "Suggested PT" chip row.
+- Tap the total line for all exercises, or a group for just that group (with + Today / + Next).
 
 **Suggested — today**
 - PT first, always: every PT still owed this week, grouped by area, rested ones leading, recently done ones tagged "Later · why".
@@ -59,6 +59,7 @@ Last updated: 2026-10-26
 - **⇄ swap** on each rotation row: switch that slot to a Compound or Isolation pick for today; the PT it replaced stays next in line.
 - **⋯ options**: "PT picks shown" (how many rows) and "PT order" — Rotation (default) or Spread (the older most-rested-groups mix).
 - Grid layout: groups fill the width in as many columns as fit (3 on a phone), short names with session boxes right after.
+- Removed the "Suggested PT" chip row under the grid (the Suggested section covers it).
 - **In Today marker on the grid cells**: an exercise loaded into Today (not done yet) shows its next session box in light purple with a purple ring, and its short name turns purple — Today's color, separate from the red/yellow/green freshness colors. Added to the color key as "in Today".
 
 ## 🔧 To be improved

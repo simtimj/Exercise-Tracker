@@ -2433,26 +2433,6 @@
       strip.append(legend);
       if (gridOpen && (gridOpen === '*' || groups.some(g => g.name === gridOpen))) strip.append(gridDetail(gridCat, groups));
       else gridOpen = null;
-
-      // PT keeps its one-chip-per-exercise row.
-      if (gridCat === 'PT') {
-        const chips = el('div', 'pt-chips');
-        list.slice()
-          .sort((a, b) => a.met - b.met || a.weekDone / a.weekTarget - b.weekDone / b.weekTarget
-            || b.days - a.days || a.firstRow - b.firstRow)
-          .forEach(ex => {
-            const chip = el('button', 'chip' + (ex.met ? ' met' : ex.weekDone ? ' partial' : ''));
-            chip.type = 'button';
-            chip.title = ex.name;
-            chip.append(el('span', 'chip-name', (ex.met ? '✓ ' : '') + ex.name),
-              el('span', 'chip-n', ex.weekDone + '/' + ex.weekTarget));
-            chip.addEventListener('click', () => openInGrid(ex));
-            chips.append(chip);
-          });
-        const row = el('div', 'pt-chips-row');
-        row.append(el('span', 'pt-chips-label', 'Suggested PT'), chips);
-        strip.append(row);
-      }
     }
 
     // Chip tap: open the exercise's muscle group in the grid panel above and flash its row.
