@@ -9,6 +9,11 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 - clasp only pushes `.js`, `.gs`, `.html` and `appsscript.json`; files like this one stay in GitHub only.
 - Most changes are made from a phone via Claude, so keep commits small and working — every push to `main` goes live.
 
+## README is the feature list — always keep it current
+
+- `README.md` lists every feature under: ✅ Working · 🧪 To be confirmed · 🔧 To be improved · 📋 To do · 💤 Shelved, in plain language for Julius (this file keeps the technical detail).
+- **Every change that adds, changes or removes a feature must update `README.md` in the same commit.** New work goes under 🧪 To be confirmed (with the date); move it to ✅ Working once Julius says it works; tweaks he wants go under 🔧; ideas he mentions but hasn't asked to build go under 📋. Update the "Last updated" date.
+
 ## Files
 
 - `code.js` — server side: `doGet()` serves `Index`; `getSheetData()` returns the tab's display values; `getTrackerData()` → `parseRows()` returns groups (column A, carried down to blank-A rows) with exercises, last-trained date and days since. `AREAS` is the single recovery config: column A labels → six body areas with recovery days (unmapped → "Other", 2 days); each group carries `area` + `recoveryDays`, and `getTrackerData()` also returns `areas`. `logExercise(row, name, entry)` writes to the sheet (see Logging below). Exports for Node so the parser and the pure logging helpers can be tested locally with `node -e`.
