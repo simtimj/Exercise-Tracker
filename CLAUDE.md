@@ -83,6 +83,11 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - Picks N PT exercises across the PT muscle groups (column A). Each slot goes to the group with the highest score = days rested (min 1, as of this morning) / (slots already given + 1); ties → fewer slots, then more rested. Nothing is skipped (Julius: sometimes two from one group is right); fresh start = one per group. Inside a group: still owed this week first, then longest gap.
 - N defaults to 5, set in the `⋯` options panel top right (1–10, localStorage `spreadN`).
 
+## PT rotation (2026-10-26, Julius)
+
+- Default PT block at the top of Suggested (both views), replacing PT spread unless `⋯` → PT order is set to Spread (localStorage `ptMode`). `ptCycle()` builds a fixed repeating order: first PT exercise of each PT group (sheet order), then the second of each, etc. `ptRotation()` starts right after the last PT logged before today (same day → later in the cycle) and shows the next N (`spreadN`, same `⋯` stepper, now "PT picks shown"). Each row shows its cycle number.
+- It's only an order in Suggested — nothing written anywhere. `⇄` on a row cycles that slot PT → Compound → Isolation → PT for today (localStorage `rotSwaps`, `{date, slots}`); fill-ins come from `swapPool()` (Suggested's area picks first, then longest gap). The replaced PT stays next in line.
+
 ## Suggested — by area, longest since first (2026-10-25, replaces the category split)
 
 - Julius uses Suggested most of the time; open by default with a solid accent border. The hint line and the "Everything is rested." line were removed (Julius, 2026-10-25); the Resting line shows only when an area is resting, and the "Rest days ✎" button now sits in the Suggested header (stopPropagation so it doesn't collapse the section).

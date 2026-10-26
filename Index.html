@@ -798,6 +798,11 @@
     }
     .opt-row #spread-n { min-width: 1.4em; text-align: center; font-weight: 700; }
     .spread { margin: 2px 0 8px; }
+    .opt-row .opt-mode { padding: 3px 8px; }
+    .opt-row .opt-mode.on { background: var(--z-today, #5b3fa0); color: #fff; border-color: transparent; }
+    .spread-row .sp-pos { flex: 0 0 auto; min-width: 1.6em; font-size: 12px; font-weight: 700; color: var(--muted); text-align: right; }
+    .spread-row .sp-swap { flex: 0 0 auto; font-size: 11px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--muted); }
+    .spread-row.swapped .sp-swap { color: var(--text, inherit); font-weight: 700; }
     .spread-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 12px; border-top: 1px solid var(--border); }
     .spread-row.done { opacity: 0.55; }
     .spread-row .thumb { width: 32px; height: 32px; border-radius: 6px; flex: 0 0 auto; }
@@ -822,10 +827,15 @@
     </header>
     <div class="opt-panel" id="opt-panel" hidden>
       <div class="opt-row">
-        <span class="opt-name">PT spread picks</span>
+        <span class="opt-name">PT picks shown</span>
         <button type="button" data-spread="-1" aria-label="Fewer">−</button>
         <span id="spread-n">5</span>
         <button type="button" data-spread="1" aria-label="More">+</button>
+      </div>
+      <div class="opt-row">
+        <span class="opt-name">PT order</span>
+        <button type="button" class="opt-mode" data-ptmode="rotation">Rotation</button>
+        <button type="button" class="opt-mode" data-ptmode="spread">Spread</button>
       </div>
     </div>
 
@@ -1575,6 +1585,132 @@
       return box;
     }
 
+    // ---------- PT rotation (2026-10-26, Julius) ----------
+    // A fixed, repeating order through every PT exercise: one from each PT
+    // muscle group in sheet order, then the second of each, and so on. The
+    // list starts right after the most recently logged PT exercise (as of
+    // this morning), so it just keeps cycling. It's only an order shown in
+    // Suggested — nothing is written anywhere. Any slot can be switched for
+    // today to a Compound or Isolation pick (⇄ cycles PT → Compound →
+    // Isolation); the PT it replaced stays next in line for next time.
+    let ptMode = 'rotation';
+    try { if (localStorage.getItem('ptMode') === 'spread') ptMode = 'spread'; } catch (e) {}
+
+    function ptCycle(all) {
+      const pt = all.filter(ex => ex.category === 'PT').sort((a, b) => a.firstRow - b.firstRow);
+      const order = [];
+      pt.forEach(ex => { if (!order.includes(ex.group)) order.push(ex.group); });
+      const byGroup = order.map(g => pt.filter(ex => ex.group === g));
+      const cycle = [];
+      for (let i = 0; cycle.length < pt.length; i++) byGroup.forEach(list => { if (list[i]) cycle.push(list[i]); });
+      return cycle;
+    }
+
+    function ptRotation(sections, n) {
+      const all = [].concat(...sections.map(s => s.exercises));
+      const cycle = ptCycle(all);
+      if (!cycle.length) return [];
+      // Last PT done before today; same day → the later one in the cycle.
+      let last = -1, lastDays = Infinity;
+      cycle.forEach((ex, i) => {
+        const d = realDaysBeforeToday(ex);
+        if (d != null && d <= lastDays) { last = i; lastDays = d; }
+      });
+      const groups = groupStatus(all);
+      const out = [];
+      for (let k = 0; k < Math.min(n, cycle.length); k++) {
+        const i = (last + 1 + k) % cycle.length;
+        out.push(Object.assign({}, cycle[i], { rotPos: i + 1, rotOf: cycle.length, spreadSince: groups[cycle[i].group].since }));
+      }
+      return out;
+    }
+
+    // Today's swaps: { date, slots: { slotIndex: 'Compound' | 'Isolation' } }.
+    function rotSwaps() {
+      try {
+        const v = JSON.parse(localStorage.getItem('rotSwaps') || 'null');
+        if (v && v.date === data.today && v.slots) return v.slots;
+      } catch (e) {}
+      return {};
+    }
+    function setRotSwap(i, cat) {
+      const slots = rotSwaps();
+      if (cat) slots[i] = cat; else delete slots[i];
+      try { localStorage.setItem('rotSwaps', JSON.stringify({ date: data.today, slots })); } catch (e) {}
+      render();
+    }
+    const SWAP_NEXT = { PT: 'Compound', Compound: 'Isolation', Isolation: null };
+
+    // Compound / Isolation fill-ins: Suggested's area picks first (most
+    // neglected ready areas), then everything else in that category, longest gap first.
+    function swapPool(sections, cat) {
+      const sug = suggestedExercises(sections);
+      const all = [].concat(...sections.map(s => s.exercises));
+      const first = [].concat(...sug.blocks.map(b => b.items)).filter(ex => ex.category === cat);
+      const rest = all.filter(ex => ex.category === cat && !first.some(f => f.key === ex.key))
+        .sort((a, b) => daysBeforeToday(b) - daysBeforeToday(a) || a.firstRow - b.firstRow);
+      return first.concat(rest);
+    }
+
+    function rotationBlock(sections) {
+      const list = ptRotation(sections, spreadN);
+      const box = el('div', 'spread');
+      if (!list.length) return box;
+      const slots = rotSwaps();
+      const used = new Set(list.map(ex => ex.key));
+      const pools = {};
+      const groups = groupStatus([].concat(...sections.map(s => s.exercises)));
+      const head = el('div', 'cat-head');
+      const lbl = el('span', '');
+      lbl.append(el('span', 'cat-name', 'PT rotation'), el('span', 'cat-rest', ' · next in order'));
+      head.append(lbl, el('span', 'cat-count', String(list.length)));
+      box.append(head);
+      list.forEach((pt, i) => {
+        const cat = slots[i];
+        let ex = pt;
+        if (cat) {
+          const pool = pools[cat] || (pools[cat] = swapPool(sections, cat));
+          const pick = pool.find(x => !used.has(x.key));
+          if (pick) { used.add(pick.key); ex = Object.assign({}, pick, { spreadSince: (groups[pick.group] || {}).since }); }
+        }
+        const swapped = ex !== pt;
+        const done = isDoneToday(ex);
+        const row = el('div', 'spread-row' + (done ? ' done' : '') + (swapped ? ' swapped' : ''));
+        row.dataset.key = ex.key;
+        const txt = el('span', 'sp-text');
+        const meta = swapped
+          ? ex.category + ' · ' + ex.group + ' · ' + sinceText(ex.spreadSince) + ' · instead of ' + pt.name
+          : ex.group + ' · ' + sinceText(ex.spreadSince);
+        txt.append(el('span', 'sp-name', (done ? '✓ ' : '') + ex.name), el('span', 'sp-meta', meta));
+        const pos = el('span', 'sp-pos', swapped ? '⇄' : String(pt.rotPos));
+        pos.title = swapped ? 'Switched for today' : pt.rotPos + ' of ' + pt.rotOf + ' in the PT rotation';
+        const cur = cat && swapped ? cat : 'PT';
+        const nextCat = SWAP_NEXT[cur];
+        const sw = el('button', 'sp-swap', '⇄ ' + (nextCat ? nextCat.slice(0, 4) : 'PT'));
+        sw.type = 'button';
+        sw.title = nextCat ? 'Switch this slot to a ' + nextCat + ' pick for today' : 'Back to the PT rotation';
+        sw.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); setRotSwap(i, nextCat); });
+        row.append(pos, exThumb(ex), txt);
+        if (!done) row.append(quickAdd(ex, true));
+        row.append(sw);
+        box.append(row);
+      });
+      return box;
+    }
+
+    function ptOrderBlock(sections) {
+      return ptMode === 'spread' ? spreadBlock(sections) : rotationBlock(sections);
+    }
+    function setPtMode(mode) {
+      ptMode = mode === 'spread' ? 'spread' : 'rotation';
+      try { localStorage.setItem('ptMode', ptMode); } catch (e) {}
+      markPtMode();
+      render();
+    }
+    function markPtMode() {
+      document.querySelectorAll('[data-ptmode]').forEach(b => b.classList.toggle('on', b.dataset.ptmode === ptMode));
+    }
+
     function setSpreadN(n) {
       spreadN = Math.max(SPREAD_MIN, Math.min(SPREAD_MAX, n));
       try { localStorage.setItem('spreadN', String(spreadN)); } catch (e) {}
@@ -1614,7 +1750,7 @@
         if (restEditOpen) secEl.append(restEditor());
       }
 
-      secEl.append(spreadBlock(sections));
+      secEl.append(ptOrderBlock(sections));
       appendSuggestTree(secEl, sug, ex => open ? exerciseCard(ex, false, true) : pickRow(ex, pickMeta(ex)));
 
       if (!items.length) {
@@ -2410,7 +2546,7 @@
     function compactSuggest(base) {
       const sug = suggestedExercises(base);
       const s = pvSection('suggest-sec', 'suggest', 'Suggested', '');
-      s.append(spreadBlock(base));
+      s.append(ptOrderBlock(base));
       appendSuggestTree(s, sug, ex => pvRow(ex, pickMeta(ex), [quickAdd(ex, true)]), true);
       if (s.children.length === 2 && !s.children[1].children.length) s.append(el('p', 'empty small', 'Nothing to suggest right now.'));
       return boxGroups(s);
@@ -2663,11 +2799,14 @@
     // Options panel (⋯ top right): PT spread count, remembered per device.
     const optPanel = document.getElementById('opt-panel');
     document.getElementById('spread-n').textContent = spreadN;
+    markPtMode();
     document.getElementById('opt-btn').addEventListener('click', e => { e.stopPropagation(); optPanel.hidden = !optPanel.hidden; });
     optPanel.addEventListener('click', e => {
       e.stopPropagation();
       const b = e.target.closest('[data-spread]');
       if (b) setSpreadN(spreadN + Number(b.dataset.spread));
+      const m = e.target.closest('[data-ptmode]');
+      if (m) setPtMode(m.dataset.ptmode);
     });
     document.addEventListener('click', () => { optPanel.hidden = true; });
 
