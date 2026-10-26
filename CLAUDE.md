@@ -31,6 +31,11 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 
 - Banner-free wrapper (2026-10-26, shelved — it worked but felt too slow; Julius uses the plain /exec link. Code left in place, harmless when not framed): `wrapper/index.html` is a full-screen iframe around the web app, published to GitHub Pages (https://simtimj.github.io/Exercise-Tracker/) by `.github/workflows/pages.yaml`, which fills in `vars.DEPLOYMENT_ID`. Opened via the wrapper the app gets `?wrap=1`, and ↻ reloads the wrapper instead of the bare /exec URL. `doGet()` sets `XFrameOptionsMode.ALLOWALL` so it can be framed. Needs Pages enabled once (Settings → Pages → Source: GitHub Actions). Goal: hide the "created by a Google Apps Script user" banner; if it works, do the same for Gantt.
 
+## Layout testing (2026-10-26)
+
+- `#groups` must use `minmax(0, 1fr)` columns (not `1fr`), or the widest content widens the column past a phone screen.
+- To check fit: export the sheet CSV via the Drive connector, build data with `parseRows()` from `code.js`, inject a `google.script.run` stub plus `<meta name=viewport content="width=device-width, initial-scale=1">` (the real app sets it in `doGet()`), and render with Python Playwright (Chromium works in the workspace) at 360/390/820/1440 px; compare `document.documentElement.scrollWidth` to the viewport. The Notes slide-out sits off-screen on purpose.
+
 ## Source sheet
 
 - Spreadsheet "Ex", ID `1oBtPYDCDiiXms0cqbfiymrAQ-qqLeI5OI7Ojee8Z_IY`. The sheet is the source of truth.

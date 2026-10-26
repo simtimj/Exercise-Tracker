@@ -61,6 +61,7 @@ Last updated: 2026-10-26
 - Grid layout: groups fill the width in as many columns as fit (3 on a phone), short names with session boxes right after.
 - Removed the "Suggested PT" chip row under the grid (the Suggested section covers it).
 - Logging: weight and reps save together in one cell as `light red band: 20, 20`, shown as Prev next time; a weight with no reps now still saves the weight (was dropped).
+- **Fits the screen** on phone, tablet and desktop: the main list was a grid column that grew to its widest content and pushed sections off the right edge of a phone; it now matches the screen width. On small phones the PT rotation rows give names two lines and tighter buttons. Checked at 360, 390, 820 and 1440px wide.
 - **In Today marker on the grid cells**: an exercise loaded into Today (not done yet) shows its next session box in light purple with a purple ring, and its short name turns purple — Today's color, separate from the red/yellow/green freshness colors. Added to the color key as "in Today".
 
 ## 🔧 To be improved
