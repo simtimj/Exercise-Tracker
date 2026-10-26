@@ -652,9 +652,9 @@
       <h1>Exercise Tracker</h1>
       <div id="status">Loading…</div>
       <div class="view-tabs" id="view-tabs">
-        <button class="notes-btn" data-view="full" type="button">Full</button>
-        <button class="notes-btn" data-view="pick" type="button">Pick</button>
         <button class="notes-btn" data-view="today" type="button">Today</button>
+        <button class="notes-btn" data-view="pick" type="button">Simple</button>
+        <button class="notes-btn" data-view="full" type="button">Full</button>
       </div>
     </header>
 
@@ -1735,8 +1735,9 @@
     // ---------- Pick view (experiment, 2026-10-25) ----------
     // Small and concise: Today, Up next, Suggested as one-line rows.
     // No logging here — rows only move exercises between the lists.
-    // Header view tabs (2026-10-25): Full (everything), Pick (compact
-    // choosing), Today (full cards with logging for today + Up next).
+    // Header view tabs (2026-10-25), left to right: Today (full cards with
+    // logging for today + Up next, compact Suggested below), Simple (internal
+    // 'pick': compact choosing), Full (everything).
     let view = 'full';
     try {
       view = localStorage.getItem('view') || (localStorage.getItem('pickView') === '1' ? 'pick' : 'full');
@@ -1821,13 +1822,18 @@
       ])));
       out.push(n);
 
-      // Suggested: tap to add, nothing logged here.
+      out.push(compactSuggest(base));
+      return out;
+    }
+
+    // Suggested as compact one-line rows: tap to add, nothing logged here.
+    // Used by Simple view and at the bottom of Today view.
+    function compactSuggest(base) {
       const sug = suggestedExercises(base);
       const s = pvSection('suggest-sec', 'suggest', 'Suggested', '');
       appendSuggestTree(s, sug, ex => pvRow(ex, pickMeta(ex), [quickAdd(ex, true)]), true);
       if (s.children.length === 1) s.append(el('p', 'empty small', 'Nothing to suggest right now.'));
-      out.push(boxGroups(s));
-      return out;
+      return boxGroups(s);
     }
 
     // One-time muscle group cleanup (GROUP_RENAMES in code.js): shown until
@@ -1882,8 +1888,9 @@
         // Today focus: full cards (facts + log box) for today, Up next below.
         const base = buildSections();
         wrap.append(sectionEl({ id: 'today-sec', name: 'Today', exercises: plannedExercises(base), wide: true, focus: true,
-          emptyText: 'Nothing for today yet. Add some from Pick or Full view.' }));
+          emptyText: 'Nothing for today yet. Add some from Suggested below.' }));
         wrap.append(upNextSection(upNext));
+        wrap.append(compactSuggest(base));
         setTopHeight();
         return;
       }
