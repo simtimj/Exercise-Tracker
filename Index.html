@@ -619,6 +619,14 @@
     .gx.met .gx-name { color: var(--muted); }
     .gx-cells { display: flex; gap: 2px; flex: 0 0 auto; }
     .gx-cells .seg { flex: 0 0 14px; height: 8px; }
+    /* Compact grid (2026-10-26, Julius: too much empty space): names sit in one
+       fixed-width column so every exercise's cells start right after its name
+       and line up across all groups; groups are sized to their content. */
+    .pt-groups { grid-template-columns: repeat(2, max-content); justify-content: start; column-gap: 22px; }
+    .pt-grp.labeled { align-items: start; }
+    .pt-grp.labeled .pt-grp-head { gap: 8px; }
+    .pt-grp.labeled .pt-grp-name { flex: 0 1 auto; }
+    .gx-name { flex: 0 0 5.8em; }
     .pt-detail {
       margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
       background: var(--card); font-size: 13px;
