@@ -2677,7 +2677,13 @@
       refreshBtn.classList.add('spin');
       if (!refreshBtn.getAttribute('href')) { e.preventDefault(); loadData(); }
     });
-    google.script.run.withSuccessHandler(url => { if (url) refreshBtn.href = url; }).getAppUrl();
+    // Opened through the banner-free wrapper (?wrap=1): ↻ reloads the wrapper,
+    // not the bare /exec URL (which brings the Apps Script banner back).
+    const WRAP_URL = 'https://simtimj.github.io/Exercise-Tracker/';
+    google.script.url.getLocation(loc => {
+      if (loc && loc.parameter && loc.parameter.wrap) refreshBtn.href = WRAP_URL;
+      else google.script.run.withSuccessHandler(url => { if (url) refreshBtn.href = url; }).getAppUrl();
+    });
     loadData();
   </script>
 </body>

@@ -219,7 +219,9 @@ function recordHistory(row) {
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Exercise Tracker')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    // Lets the GitHub Pages wrapper (no Apps Script banner) frame the app.
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 // Web app URL, so the client's ↻ button can reload the whole page (new code + data).

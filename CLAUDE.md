@@ -23,6 +23,8 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 
 - Refresh (2026-10-26, Julius: wants a real page refresh, the browser's is hard to reach): the ↻ right of the title is a `target="_top"` link to `getAppUrl()` (`ScriptApp.getService().getUrl()`), so it reloads the whole app — new deploys and data. Before the URL arrives it falls back to `loadData()`.
 
+- Banner-free wrapper (2026-10-26, trying): `wrapper/index.html` is a full-screen iframe around the web app, published to GitHub Pages (https://simtimj.github.io/Exercise-Tracker/) by `.github/workflows/pages.yaml`, which fills in `vars.DEPLOYMENT_ID`. Opened via the wrapper the app gets `?wrap=1`, and ↻ reloads the wrapper instead of the bare /exec URL. `doGet()` sets `XFrameOptionsMode.ALLOWALL` so it can be framed. Needs Pages enabled once (Settings → Pages → Source: GitHub Actions). Goal: hide the "created by a Google Apps Script user" banner; if it works, do the same for Gantt.
+
 ## Source sheet
 
 - Spreadsheet "Ex", ID `1oBtPYDCDiiXms0cqbfiymrAQ-qqLeI5OI7Ojee8Z_IY`. The sheet is the source of truth.

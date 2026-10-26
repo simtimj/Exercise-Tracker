@@ -1,0 +1,39 @@
+name: Wrapper page (GitHub Pages)
+
+# Publishes wrapper/index.html, a full-screen frame around the web app so the
+# "created by a Google Apps Script user" banner doesn't show.
+# One-time setup: repo Settings → Pages → Source: GitHub Actions.
+
+on:
+  push:
+    branches: [main]
+    paths: ['wrapper/**', '.github/workflows/pages.yaml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  pages:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fill in the web app URL
+        run: |
+          mkdir -p site
+          sed "s#__APP_URL__#https://script.google.com/macros/s/${{ vars.DEPLOYMENT_ID }}/exec#" wrapper/index.html > site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
