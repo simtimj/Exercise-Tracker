@@ -603,6 +603,22 @@
     .pt-grp-n { white-space: nowrap; font-variant-numeric: tabular-nums; }
     .pt-grp.partial .pt-grp-name { color: var(--text); }
     .pt-grp.met { opacity: 0.7; }
+    /* Labeled grid (2026-10-26): group head, then one line per exercise —
+       short name on the left, its session cells on the right. */
+    .pt-grp.labeled { flex-direction: column; align-items: stretch; gap: 3px; }
+    .pt-grp.labeled .pt-grp-head { display: flex; align-items: center; gap: 6px; }
+    .pt-grp.labeled .pt-grp-name {
+      width: auto; flex: 1; min-width: 0;
+      font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .gx { display: flex; align-items: center; gap: 6px; }
+    .gx-name {
+      flex: 1; min-width: 0; font-size: 11.5px; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .gx.met .gx-name { color: var(--muted); }
+    .gx-cells { display: flex; gap: 2px; flex: 0 0 auto; }
+    .gx-cells .seg { flex: 0 0 14px; height: 8px; }
     .pt-detail {
       margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
       background: var(--card); font-size: 13px;
@@ -1975,6 +1991,40 @@
       return Object.assign(freshOf(days, list[0].recoveryDays), { days });
     };
 
+    // Short names for the grid labels (full name stays in the tap panel).
+    // Order matters: more specific patterns first.
+    const SHORT_NAMES = [
+      [/glute bridge/i, 'Bridge'], [/romanian|\brdl\b/i, 'RDL'], [/bulgarian/i, 'BSS'],
+      [/step ?ups?/i, 'Step up'], [/side ?lying/i, 'Side-lying'], [/band walk/i, 'Band walk'],
+      [/clam/i, 'Clams'], [/dead ?bug/i, 'Dead bug'], [/bird ?dog/i, 'Bird dog'],
+      [/pull ?ups?/i, 'Pull up'], [/incline/i, 'Incline'], [/bench press/i, 'Bench'],
+      [/one-?arm/i, '1-arm row'], [/barbell row/i, 'Row'], [/overhead press/i, 'OHP'],
+      [/walking lunge/i, 'Lunge'], [/^squat/i, 'Squat'], [/ab wheel/i, 'Ab wheel'],
+      [/hanging knee/i, 'Knee raise'], [/decline crunch/i, 'Crunch'], [/side plank/i, 'Side plank'],
+      [/lateral raise/i, 'Lat raise'], [/bicep curl/i, 'Curl'], [/tricep.*ext/i, 'Tri ext'],
+      [/calf/i, 'Calf raise'], [/rear delt/i, 'Rear fly'],
+    ];
+    function shortName(name) {
+      const hit = SHORT_NAMES.find(([re]) => re.test(name));
+      if (hit) return hit[1];
+      const words = String(name).replace(/\(.*?\)/g, '').replace(/[.\s]+$/, '').trim().split(/\s+/);
+      return words.slice(0, 2).join(' ');
+    }
+
+    // One line per exercise: short name + one box per session in its weekly goal.
+    function exLines(list) {
+      const box = el('div', 'gx-list');
+      list.forEach(ex => {
+        const line = el('div', 'gx' + (ex.met ? ' met' : ''));
+        line.title = ex.name;
+        const cells = el('span', 'gx-cells');
+        for (let i = 0; i < ex.weekTarget; i++) cells.append(el('span', 'seg' + (i < ex.weekDone ? ' full' : '')));
+        line.append(el('span', 'gx-name', (ex.met ? '✓ ' : '') + shortName(ex.name)), cells);
+        box.append(line);
+      });
+      return box;
+    }
+
     // One cluster per exercise, one box per session in its weekly goal.
     function clusterBar(list, allMet) {
       const bar = el('div', 'seg-bar clusters' + (allMet ? ' all' : ''));
@@ -2083,13 +2133,15 @@
         const s2 = sessOf(g.list);
         const allMet = s2.done >= s2.total;
         const f = groupFresh(g.list);
-        const row = el('button', 'pt-grp ' + f.cls + (allMet ? ' met' : s2.done ? ' partial' : '')
+        const row = el('button', 'pt-grp labeled ' + f.cls + (allMet ? ' met' : s2.done ? ' partial' : '')
           + (g.solo ? ' solo' : '') + (gridOpen === g.name ? ' open' : ''));
         row.type = 'button';
         row.title = g.name + ' · ' + f.label + (f.days >= 30 ? '' : ' · last ' + daysLabel(f.days));
         const name = el('span', 'pt-grp-name');
         name.append(freshDot(f), document.createTextNode((allMet ? '✓ ' : '') + g.name));
-        row.append(name, clusterBar(g.list, allMet), el('span', 'pt-grp-n', s2.done + '/' + s2.total));
+        const head = el('span', 'pt-grp-head');
+        head.append(name, el('span', 'pt-grp-n', s2.done + '/' + s2.total));
+        row.append(head, exLines(g.list));
         row.addEventListener('click', () => { gridOpen = gridOpen === g.name ? null : g.name; render(); });
         grid.append(row);
       });
