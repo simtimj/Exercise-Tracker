@@ -628,6 +628,11 @@
     .gx-cells .seg.full.plan { box-shadow: 0 0 0 1.5px var(--z-today); }
     @media (prefers-color-scheme: dark) { .gx-cells .seg.plan:not(.full) { background: hsl(268 40% 38%); } }
     .gx.planned .gx-name { color: var(--z-today); font-weight: 600; }
+    /* In Up next (2026-10-27, Julius): same idea, lighter purple and no ring —
+       the ring is what marks Today. */
+    .gx-cells .seg.next:not(.full) { background: hsl(268 70% 92%); }
+    @media (prefers-color-scheme: dark) { .gx-cells .seg.next:not(.full) { background: hsl(268 28% 30%); } }
+    .gx.upnext .gx-name { color: hsl(268 50% 72%); }
     /* Compact grid (2026-10-26, Julius: too much empty space): names sit in one
        fixed-width column so every exercise's cells start right after its name
        and line up across all groups; groups are sized to their content. */
@@ -2333,14 +2338,16 @@
         // Loaded into Today and not done yet: the session he's about to do gets a
         // purple "planned" cell (Today's color, not a freshness color).
         const planned = todayKeys.has(ex.key) && ex.days !== 0;
-        const line = el('div', 'gx' + (ex.met ? ' met' : '') + (planned ? ' planned' : ''));
-        line.title = ex.name + (planned ? ' · in Today' : '');
+        const queued = !planned && upNextKeys.has(ex.key) && ex.days !== 0 && !ex.met;
+        const line = el('div', 'gx' + (ex.met ? ' met' : '') + (planned ? ' planned' : '') + (queued ? ' upnext' : ''));
+        line.title = ex.name + (planned ? ' · in Today' : queued ? ' · up next' : '');
         const cells = el('span', 'gx-cells');
         const nextCell = Math.min(ex.weekDone, ex.weekTarget - 1);
         for (let i = 0; i < ex.weekTarget; i++) {
           const full = i < ex.weekDone;
           const plan = planned && (full ? (ex.weekDone >= ex.weekTarget && i === nextCell) : i === nextCell);
-          cells.append(el('span', 'seg' + (full ? ' full' : '') + (plan ? ' plan' : '')));
+          const nx = queued && !full && i === nextCell;
+          cells.append(el('span', 'seg' + (full ? ' full' : '') + (plan ? ' plan' : '') + (nx ? ' next' : '')));
         }
         line.append(el('span', 'gx-name', (ex.met ? '✓ ' : '') + shortName(ex.name)), cells);
         box.append(line);
@@ -2488,7 +2495,7 @@
         legend.append(k);
       });
       const pk = el('span', 'gx-cells');
-      pk.append(el('span', 'seg plan'), document.createTextNode('in Today'));
+      pk.append(el('span', 'seg plan'), document.createTextNode('in Today'), el('span', 'seg next'), document.createTextNode('up next'));
       pk.style.gap = '4px';
       pk.style.alignItems = 'center';
       legend.append(pk);

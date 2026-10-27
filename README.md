@@ -69,6 +69,8 @@ Last updated: 2026-10-27
 - **Fits the screen** on phone, tablet and desktop: the main list was a grid column that grew to its widest content and pushed sections off the right edge of a phone; it now matches the screen width. On small phones the PT rotation rows give names two lines and tighter buttons. Checked at 360, 390, 820 and 1440px wide.
 - **In Today marker on the grid cells**: an exercise loaded into Today (not done yet) shows its next session box in light purple with a purple ring, and its short name turns purple — Today's color, separate from the red/yellow/green freshness colors. Added to the color key as "in Today".
 
+- **Up next marker on the grid cells (2026-10-27)**: an exercise in Up next shows its next session box in a lighter purple, with no ring, and its short name in light purple. Today keeps the darker purple box with the brighter ring, so the ring is the difference. Added to the color key as "up next".
+
 ## 🔧 To be improved
 
 - Tweaking which exercises Suggested picks.
