@@ -2,7 +2,7 @@
 
 Google Apps Script web app on top of the "Ex" Google Sheet (tab `V5: PT, Compound, Iso`). An easier UI than the sheet: what's been trained, what's falling behind, what to do today, and quick logging. The sheet stays the source of truth. Every push to `main` deploys automatically. Deeper technical notes live in `CLAUDE.md`.
 
-Last updated: 2026-10-27
+Last updated: 2026-11-02
 
 ## Status key
 
@@ -39,7 +39,7 @@ Last updated: 2026-10-27
 - Resting line (which areas rest until when) and **Rest days ✎** editor (recovery days per area, saved per account).
 - Computed "as of this morning", so it doesn't reshuffle while logging.
 
-- **⋯ options** (top right): "PT picks shown" (how many rows) and "PT order" — Rotation (default) or Spread. Tap anywhere outside to close; dragging/scrolling leaves it open (confirmed on tablet 2026-10-27).
+- **⋯ options** (top right): "PT picks shown" (how many rows) and "PT order" — Least recent (default) or Spread. Tap anywhere outside to close; dragging/scrolling leaves it open (confirmed on tablet 2026-10-27).
 
 **Today / Up next / picks**
 - + Today / + Next on any exercise (one tap, tap again to undo); bulk select with checkboxes and the bottom bar.
@@ -57,12 +57,16 @@ Last updated: 2026-10-27
 
 ## 🧪 To be confirmed (shipped 2026-10-26)
 
+**Suggested: least recent first (2026-11-02)**
+- Suggested runs top to bottom from the exercise touched least lately. Never-logged exercises rank highest. This replaces the fixed PT rotation.
+- Every Suggested row shows that exercise's own days since, using its newest entry across all its rows (2 bird dogs a week count as one exercise, latest date wins). It used to show the muscle group's number.
+- PT that's resting or done yesterday still sits below rested PT, tagged "Later".
+
 **Simple view Today, compact (2026-10-26)**
 - Today cards sit two per row on a phone (more on a tablet), with smaller text and pictures; Prev 2 is hidden there to save space.
 - **▴ Hide** at the right of the PT · Compound · Isolation tabs folds the grid down to just the tabs, so the sticky header takes almost no room; **▾ Grid** (or tapping a tab) brings it back. Remembered on the device.
 
-- **PT rotation** at the top of Suggested: a fixed, repeating PT order (one from each PT group, then the next of each…) that picks up after the last PT you did. Only an order — nothing is written anywhere.
-- **⇄ swap** on each rotation row: switch that slot to a Compound or Isolation pick for today; the PT it replaced stays next in line.
+- **⇄ swap** on each PT row at the top of Suggested: switch that slot to a Compound or Isolation pick for today.
 - Grid layout: groups fill the width in as many columns as fit (3 on a phone), short names with session boxes right after.
 - Removed the "Suggested PT" chip row under the grid (the Suggested section covers it).
 - Logging: weight and reps save together in one cell as `light red band: 20, 20`, shown as Prev next time; a weight with no reps now still saves the weight (was dropped).

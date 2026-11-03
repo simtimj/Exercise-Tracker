@@ -891,7 +891,7 @@
       </div>
       <div class="opt-row">
         <span class="opt-name">PT order</span>
-        <button type="button" class="opt-mode" data-ptmode="rotation">Rotation</button>
+        <button type="button" class="opt-mode" data-ptmode="rotation">Least recent</button>
         <button type="button" class="opt-mode" data-ptmode="spread">Spread</button>
       </div>
     </div>
@@ -1263,6 +1263,10 @@
       return prior.length ? Math.min(...prior) : null;
     }
     const daysBeforeToday = ex => effectiveDays(realDaysBeforeToday(ex));
+    // Suggested order: least recently touched first. Uses the newest entry
+    // across all of the exercise's rows; never logged ranks above everything.
+    const untouched = ex => { const d = realDaysBeforeToday(ex); return d == null ? Infinity : d; };
+    const byUntouched = (a, b) => (untouched(b) === untouched(a) ? 0 : untouched(b) - untouched(a)) || a.firstRow - b.firstRow;
 
     // Per area: days since anything in it was trained (before today), ready or
     // resting, and the weekday it's ready again.
@@ -1309,10 +1313,8 @@
       const groups = groupStatus(all);
       const inPlan = new Set(plannedExercises(sections).map(ex => ex.key));
       const ready = ex => areas[ex.area] && areas[ex.area].ready;
-      const gap = ex => daysBeforeToday(ex);
-      const groupGap = ex => effectiveDays(groups[ex.group].since);
-      // Within an area: most neglected muscle group, then longest gap.
-      const byNeglect = (a, b) => groupGap(b) - groupGap(a) || gap(b) - gap(a) || a.firstRow - b.firstRow;
+      // Within an area: the exercise touched least recently.
+      const byNeglect = byUntouched;
       const tag = ex => Object.assign({}, ex, { suggest: areas[ex.area], suggestGroup: groups[ex.group] });
       const byCat = (a, b) => CAT_ORDER[a.category] - CAT_ORDER[b.category];
       const doneLast = list => list.filter(ex => !isDoneToday(ex)).concat(list.filter(isDoneToday));
@@ -1328,9 +1330,8 @@
       // listed. Rested ones (area ready, not done yesterday) lead, most
       // neglected area first; recently done ones follow with the reason —
       // still due this week, just lower.
-      const areaGap = ex => effectiveDays(areas[ex.area].since);
       const pt = ptOpen
-        .sort((a, b) => ptOk(b) - ptOk(a) || areaGap(b) - areaGap(a) || byNeglect(a, b))
+        .sort((a, b) => ptOk(b) - ptOk(a) || byNeglect(a, b))
         .map(ex => Object.assign(tag(ex), {
           why: ptOk(ex) ? '' : !ready(ex) ? ex.area + ' resting until ' + areas[ex.area].until
             : 'rest day (done yesterday)',
@@ -1370,8 +1371,8 @@
         g.ready = g.items.some(ptOk);
         g.week = sessions(ptAll.filter(ex => ex.area === g.area.name));
       });
-      ptGroups.sort((a, b) => b.ready - a.ready
-        || effectiveDays(b.area.since) - effectiveDays(a.area.since) || a.area.name.localeCompare(b.area.name));
+      // Group order: the group holding the least recently touched exercise.
+      ptGroups.sort((a, b) => b.ready - a.ready || byNeglect(a.items[0], b.items[0]));
 
       return {
         pt: doneLast(pt),
@@ -1452,10 +1453,9 @@
     // One-line meta under the category/area headings: muscle group + days,
     // e.g. `Glute Med · 33 days since`, or `Glute Med · Later · rest day …`.
     function pickMeta(ex) {
-      const g = ex.suggestGroup;
       const parts = [ex.group];
       if (ex.why) parts.push('Later', ex.why);
-      else if (g) parts.push(sinceText(g.since));
+      else if (ex.suggestGroup) parts.push(sinceText(realDaysBeforeToday(ex)));
       return parts.join(' · ');
     }
 
@@ -1560,7 +1560,8 @@
       const pt = sug.ptGroups.map(g => ({ area: g.area, right: g.week.done + ' / ' + g.week.total + ' this week', items: keep(g.items) }));
       cats.push({ name: 'PT', rest: ' — do these first', right: sug.ptWeek.done + ' / ' + sug.ptWeek.total + ' this week', groups: pt });
       ['Compound', 'Isolation'].forEach(cat => cats.push({ name: cat, rest: '', right: '',
-        groups: sug.blocks.map(b => ({ area: b.area, right: '', items: keep(b.items.filter(ex => ex.category === cat)) })) }));
+        groups: sug.blocks.map(b => ({ area: b.area, right: '', items: keep(b.items.filter(ex => ex.category === cat)) }))
+          .filter(g => g.items.length).sort((a, b) => byUntouched(a.items[0], b.items[0])) }));
       cats.forEach(c => {
         const groups = c.groups.filter(g => g.items.length);
         if (!groups.length) return;
@@ -1604,7 +1605,7 @@
       order.forEach(g => {
         taken[g] = 0;
         pool[g] = pt.filter(ex => ex.group === g)
-          .sort((a, b) => owed(b) - owed(a) || daysBeforeToday(b) - daysBeforeToday(a) || a.firstRow - b.firstRow);
+          .sort((a, b) => owed(b) - owed(a) || byUntouched(a, b));
       });
       const out = [];
       while (out.length < n) {
@@ -1617,7 +1618,7 @@
           if (score > bestScore || tie) { best = g; bestScore = score; }
         });
         if (best == null) break;
-        out.push(Object.assign({}, pool[best][taken[best]++], { spreadSince: groups[best].since }));
+        out.push(Object.assign({}, pool[best][taken[best]++], { spreadSince: realDaysBeforeToday(pool[best][taken[best] - 1]) }));
       }
       return out;
     }
@@ -1645,44 +1646,19 @@
       return box;
     }
 
-    // ---------- PT rotation (2026-10-26, Julius) ----------
-    // A fixed, repeating order through every PT exercise: one from each PT
-    // muscle group in sheet order, then the second of each, and so on. The
-    // list starts right after the most recently logged PT exercise (as of
-    // this morning), so it just keeps cycling. It's only an order shown in
-    // Suggested — nothing is written anywhere. Any slot can be switched for
-    // today to a Compound or Isolation pick (⇄ cycles PT → Compound →
-    // Isolation); the PT it replaced stays next in line for next time.
+    // ---------- PT order (2026-11-02, Julius) ----------
+    // Default PT block: least recently touched first. Any slot can be switched
+    // for today to a Compound or Isolation pick (⇄ cycles PT → Compound →
+    // Isolation). "rotation" is the stored mode name; the fixed cycle is gone.
     let ptMode = 'rotation';
     try { if (localStorage.getItem('ptMode') === 'spread') ptMode = 'spread'; } catch (e) {}
 
-    function ptCycle(all) {
-      const pt = all.filter(ex => ex.category === 'PT').sort((a, b) => a.firstRow - b.firstRow);
-      const order = [];
-      pt.forEach(ex => { if (!order.includes(ex.group)) order.push(ex.group); });
-      const byGroup = order.map(g => pt.filter(ex => ex.group === g));
-      const cycle = [];
-      for (let i = 0; cycle.length < pt.length; i++) byGroup.forEach(list => { if (list[i]) cycle.push(list[i]); });
-      return cycle;
-    }
-
+    // Every PT, least recently touched first (newest entry across all its
+    // rows). As of this morning, so it doesn't reshuffle while logging.
     function ptRotation(sections, n) {
       const all = [].concat(...sections.map(s => s.exercises));
-      const cycle = ptCycle(all);
-      if (!cycle.length) return [];
-      // Last PT done before today; same day → the later one in the cycle.
-      let last = -1, lastDays = Infinity;
-      cycle.forEach((ex, i) => {
-        const d = realDaysBeforeToday(ex);
-        if (d != null && d <= lastDays) { last = i; lastDays = d; }
-      });
-      const groups = groupStatus(all);
-      const out = [];
-      for (let k = 0; k < Math.min(n, cycle.length); k++) {
-        const i = (last + 1 + k) % cycle.length;
-        out.push(Object.assign({}, cycle[i], { rotPos: i + 1, rotOf: cycle.length, spreadSince: groups[cycle[i].group].since }));
-      }
-      return out;
+      const pt = all.filter(ex => ex.category === 'PT').sort(byUntouched);
+      return pt.slice(0, n).map((ex, i) => Object.assign({}, ex, { rotPos: i + 1, rotOf: pt.length, spreadSince: realDaysBeforeToday(ex) }));
     }
 
     // Today's swaps: { date, slots: { slotIndex: 'Compound' | 'Isolation' } }.
@@ -1719,10 +1695,9 @@
       const slots = rotSwaps();
       const used = new Set(list.map(ex => ex.key));
       const pools = {};
-      const groups = groupStatus([].concat(...sections.map(s => s.exercises)));
       const head = el('div', 'cat-head');
       const lbl = el('span', '');
-      lbl.append(el('span', 'cat-name', 'PT rotation'), el('span', 'cat-rest', ' · next in order'));
+      lbl.append(el('span', 'cat-name', 'PT'), el('span', 'cat-rest', ' · least recent first'));
       head.append(lbl, el('span', 'cat-count', String(list.length)));
       box.append(head);
       list.forEach((pt, i) => {
@@ -1731,7 +1706,7 @@
         if (cat) {
           const pool = pools[cat] || (pools[cat] = swapPool(sections, cat));
           const pick = pool.find(x => !used.has(x.key));
-          if (pick) { used.add(pick.key); ex = Object.assign({}, pick, { spreadSince: (groups[pick.group] || {}).since }); }
+          if (pick) { used.add(pick.key); ex = Object.assign({}, pick, { spreadSince: realDaysBeforeToday(pick) }); }
         }
         const swapped = ex !== pt;
         const done = isDoneToday(ex);
@@ -1743,12 +1718,12 @@
           : ex.group + ' · ' + sinceText(ex.spreadSince);
         txt.append(el('span', 'sp-name', (done ? '✓ ' : '') + ex.name), el('span', 'sp-meta', meta));
         const pos = el('span', 'sp-pos', swapped ? '⇄' : String(pt.rotPos));
-        pos.title = swapped ? 'Switched for today' : pt.rotPos + ' of ' + pt.rotOf + ' in the PT rotation';
+        pos.title = swapped ? 'Switched for today' : '#' + pt.rotPos + ' least recent of ' + pt.rotOf + ' PT';
         const cur = cat && swapped ? cat : 'PT';
         const nextCat = SWAP_NEXT[cur];
         const sw = el('button', 'sp-swap', '⇄ ' + (nextCat ? nextCat.slice(0, 4) : 'PT'));
         sw.type = 'button';
-        sw.title = nextCat ? 'Switch this slot to a ' + nextCat + ' pick for today' : 'Back to the PT rotation';
+        sw.title = nextCat ? 'Switch this slot to a ' + nextCat + ' pick for today' : 'Back to PT';
         sw.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); setRotSwap(i, nextCat); });
         row.append(pos, exThumb(ex), txt);
         if (!done) row.append(quickAdd(ex, true));
