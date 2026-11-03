@@ -311,6 +311,44 @@
 
     .log button:disabled { opacity: 0.5; }
 
+    /* Set-by-set logging. Wraps so it fits the two-across Simple cards too. */
+    .ex > .set-box { grid-column: 1 / -1; min-width: 0; margin-top: 8px; display: grid; gap: 6px; }
+    .set-line, .set-row, .set-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+    .set-line { font-size: 13px; color: var(--muted); }
+    .set-total { font-weight: 600; color: var(--text); }
+    .set-label { flex: 1 1 100%; font-size: 12px; color: var(--muted); }
+    .goal-btn { padding: 2px 0; font-size: 13px; color: var(--muted); background: none; border: 0; text-decoration: underline; }
+    .set-box button { font-family: inherit; }
+    .set-box button:disabled { opacity: 0.5; }
+    .set-chip {
+      min-width: 40px; height: 36px; padding: 0 10px; font-size: 15px; font-weight: 600;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text);
+    }
+    .set-chip.add { border-style: dashed; font-size: 14px; }
+    .set-complete, .set-done { margin-left: auto; font-size: 14px; font-weight: 600; }
+    .set-complete {
+      height: 36px; padding: 0 12px; border-radius: 8px; background: var(--card); color: var(--text);
+      border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--text));
+    }
+    .set-form { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+    .set-form input {
+      flex: 1 1 80px; min-width: 0; height: 40px; padding: 0 10px; font-size: 16px;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text);
+    }
+    .set-form button {
+      height: 40px; padding: 0 12px; font-size: 14px; font-weight: 600;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text);
+    }
+    .set-form button.primary { border-color: color-mix(in srgb, var(--accent) 60%, var(--text)); }
+    .set-err { flex: 1 1 100%; font-size: 13px; color: #c0392b; }
+    .set-err:empty { display: none; }
+    .undo-bar {
+      position: fixed; left: 50%; bottom: 72px; z-index: 60; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 32px); padding: 8px 14px;
+      font-size: 14px; color: var(--card); background: var(--text); border-radius: 8px;
+    }
+    .undo-bar button { padding: 4px; font-size: 14px; font-weight: 700; color: inherit; background: none; border: 0; text-decoration: underline; }
+
     /* Focus table: today's plan pinned above every list. */
     /* Each section is a tinted frame; blocks inside it (.grp) are their own
        rounded boxes with space around them. Pinned zones get their own
@@ -965,7 +1003,13 @@
     const slotToday = s => !s.noDate && s.lastDate === data.today;
 
     // Per merged exercise.
-    const isDoneToday = ex => ex.slots.some(slotToday);
+    // Started sets count for recovery, but only Complete (or a date-only finish) is done.
+    const touchedToday = ex => ex.slots.some(slotToday);
+    const onSlot = (session, ex) => ex.slots.some(s => s.row === session.row && s.name === session.name);
+    const sessionsToday = ex => (data.sessions || []).filter(x => x.date === data.today && onSlot(x, ex))
+      .sort((a, b) => (a.created < b.created ? -1 : 1));
+    const inProgress = ex => sessionsToday(ex).some(x => !x.completed);
+    const isDoneToday = ex => touchedToday(ex) && !inProgress(ex);
     function weekCount(list) {
       const done = list.reduce((n, ex) => n + ex.weekDone, 0);
       const total = list.reduce((n, ex) => n + ex.slots.length, 0);
@@ -1093,46 +1137,207 @@
       return sections;
     }
 
-    // Weight + sets, tap Log. Writes to the target row (next open slot).
-    function logBox(ex) {
-      const form = el('form', 'log');
+    // ---------- Set-by-set logging (2026-11-02) ----------
+    const newId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
+      : Date.now().toString(36) + Math.random().toString(36).slice(2));
+    const tidyWeight = w => { w = String(w || '').trim(); return /^\d+(\.\d+)?$/.test(w) ? w + 'lbs' : w; };
+    const validReps = v => /^\d+$/.test(String(v).trim()) && Number(v) > 0;
+
+    // Earlier sessions saved set by set get a total. Older text logs stay as written.
+    function withTotal(ex, entry) {
+      const x = (data.sessions || []).find(s => s.date !== data.today && onSlot(s, ex) && cleanEntry(s.text) === entry);
+      return x ? entry + ' (' + x.sets.reduce((n, set) => n + set.reps, 0) + ' total)' : entry;
+    }
+
+    // Saved data only appears after the server confirms it.
+    function setCall(name, args, msg, onOk, onFail) {
+      setStatus('Saving…');
+      google.script.run
+        .withSuccessHandler(result => { data = result; render(); setStatus(msg); if (onOk) onOk(); })
+        .withFailureHandler(err => { setStatus('Error: ' + err.message); if (onFail) onFail(err); })[name](...args);
+    }
+
+    let undoTimer = null;
+    function showUndo(text, undo) {
+      document.querySelectorAll('.undo-bar').forEach(n => n.remove());
+      clearTimeout(undoTimer);
+      const bar = el('div', 'undo-bar');
+      const btn = el('button', '', 'Undo');
+      btn.type = 'button';
+      btn.addEventListener('click', () => { bar.remove(); undo(); });
+      bar.append(el('span', '', text), btn);
+      document.body.append(bar);
+      undoTimer = setTimeout(() => bar.remove(), 8000);
+    }
+
+    // Reps + weight form, for a new set and for editing one.
+    function setForm(opts) {
+      const form = el('form', 'set-form');
       const weight = el('input', 'weight');
       weight.placeholder = 'Weight / band';
-      weight.value = (ex.plan && ex.plan.weight) || lastWeight(ex);
-      const input = el('input');
-      input.placeholder = 'Reps: 20, 20';
-      input.enterKeyHint = 'done';
-      input.inputMode = 'text';
-      const btn = el('button', '', 'Log');
-      btn.type = 'submit';
-      form.append(weight, input, btn);
+      weight.value = opts.weight || '';
+      const reps = el('input', 'reps');
+      reps.placeholder = 'Reps';
+      reps.inputMode = 'numeric';
+      reps.pattern = '[0-9]*';
+      reps.enterKeyHint = 'done';
+      reps.value = opts.reps || '';
+      const save = el('button', 'primary', 'Save');
+      save.type = 'submit';
+      const cancel = el('button', '', '✕');
+      cancel.type = 'button';
+      cancel.setAttribute('aria-label', 'Cancel');
+      cancel.addEventListener('click', () => form.remove());
+      form.append(reps, weight, save);
+      if (opts.onDelete) {
+        const del = el('button', '', 'Delete');
+        del.type = 'button';
+        del.addEventListener('click', () => { del.disabled = true; opts.onDelete(form, del); });
+        form.append(del);
+      }
+      form.append(cancel);
+      const err = el('div', 'set-err');
+      form.append(err);
+      form.showError = text => { err.textContent = text; };
       form.addEventListener('submit', e => {
         e.preventDefault();
-        let w = weight.value.trim();
-        if (/^\d+(\.\d+)?$/.test(w)) w += 'lbs'; // plain number → pounds
-        // Reps per set, tidied to "20, 20" (commas or spaces both work).
-        const sets = input.value.split(/[\s,]+/).filter(Boolean).join(', ');
-        // "25lbs: 20, 20" — weight/band, colon, then reps per set (Julius, 2026-10-25).
-        // Weight with no reps still saves the weight (2026-10-26).
-        const entry = sets ? (w ? w + ': ' + sets : sets) : w;
-        if (!entry && !confirm('Mark "' + ex.name + '" done today with no sets?')) return;
-        btn.disabled = true;
-        btn.textContent = '…';
-        setStatus('Saving ' + ex.name + '…');
-        google.script.run
-          .withSuccessHandler(result => {
-            data = result;
-            render();
-            setStatus('Logged ' + ex.name);
-          })
-          .withFailureHandler(err => {
-            btn.disabled = false;
-            btn.textContent = 'Log';
-            setStatus('Error: ' + err.message);
-          })
-          .logExercise(ex.target.row, ex.target.name, entry);
+        if (save.disabled) return;
+        if (!validReps(reps.value)) { err.textContent = 'Enter reps as a whole number above 0.'; reps.focus(); return; }
+        err.textContent = '';
+        save.disabled = true;
+        save.textContent = '…';
+        opts.onSave(Number(reps.value), tidyWeight(weight.value), text => {
+          save.disabled = false;
+          save.textContent = 'Save';
+          err.textContent = text;
+        });
       });
-      return form;
+      return { form, reps };
+    }
+
+    function openForm(host, opts) {
+      host.querySelectorAll('.set-form').forEach(n => n.remove());
+      const { form, reps } = setForm(opts);
+      host.append(form);
+      reps.focus();
+    }
+
+    function setChip(ex, session, set, label, host) {
+      const chip = el('button', 'set-chip', label);
+      chip.type = 'button';
+      chip.setAttribute('aria-label', 'Edit set: ' + set.reps + ' reps');
+      chip.addEventListener('click', () => openForm(host, {
+        reps: set.reps,
+        weight: set.weight,
+        onSave: (reps, weight, fail) => setCall('editSet', [set.id, reps, weight], 'Set updated', () => {
+          showUndo('Set updated', () => setCall('editSet', [set.id, set.reps, set.weight], 'Change undone'));
+        }, err => fail(err.message)),
+        onDelete: (form, btn) => setCall('deleteSet', [set.id], 'Set deleted', () => {
+          showUndo('Set deleted', () => setCall('saveSet', [{ id: set.id, sessionId: session.id,
+            row: session.row, name: session.name, weight: set.weight, reps: set.reps, order: set.order,
+            completed: session.completed ? new Date().toISOString() : '' }], 'Set restored'));
+        }, err => { btn.disabled = false; form.showError(err.message); }),
+      }));
+      return chip;
+    }
+
+    function goalLine(ex, total) {
+      const goal = (data.goals || {})[ex.key];
+      const line = el('div', 'set-line');
+      const btn = el('button', 'goal-btn', goal ? 'Goal: ' + goal + ' reps' : 'Set goal');
+      btn.type = 'button';
+      line.append(btn);
+      if (goal || total) line.append(el('span', 'set-total', goal ? total + ' / ' + goal + ' reps' : total + ' reps'));
+      btn.addEventListener('click', () => {
+        if (line.querySelector('form')) return;
+        const form = el('form', 'set-form goal-form');
+        const input = el('input', 'reps');
+        input.placeholder = 'Total reps';
+        input.inputMode = 'numeric';
+        input.pattern = '[0-9]*';
+        input.value = goal || '';
+        const save = el('button', 'primary', 'Save');
+        save.type = 'submit';
+        const cancel = el('button', '', '✕');
+        cancel.type = 'button';
+        cancel.setAttribute('aria-label', 'Cancel');
+        cancel.addEventListener('click', () => form.remove());
+        const err = el('div', 'set-err');
+        form.append(input, save, cancel, err);
+        form.addEventListener('submit', e => {
+          e.preventDefault();
+          const v = input.value.trim();
+          if (v && !validReps(v)) { err.textContent = 'Enter a whole number above 0, or leave it blank to clear.'; return; }
+          save.disabled = true;
+          setCall('saveGoal', [ex.key, ex.name, v], v ? 'Goal saved' : 'Goal cleared', null, e2 => {
+            save.disabled = false;
+            err.textContent = e2.message;
+          });
+        });
+        line.append(form);
+        input.focus();
+      });
+      return line;
+    }
+
+    // Goal + progress, one row of set chips per session, Add Set, Complete.
+    function setBox(ex) {
+      const box = el('div', 'set-box');
+      const sessions = sessionsToday(ex);
+      const total = sessions.reduce((n, x) => n + x.sets.reduce((m, set) => m + set.reps, 0), 0);
+      box.append(goalLine(ex, total));
+      const open = sessions.filter(x => !x.completed).pop();
+
+      sessions.forEach((x, i) => {
+        const row = el('div', 'set-row');
+        if (sessions.length > 1) row.append(el('span', 'set-label', 'Session ' + (i + 1) + (x.completed ? ' ✓' : '')));
+        const host = el('div', 'set-host');
+        let weight = null;
+        x.sets.forEach(set => {
+          const label = set.weight && weight !== null && set.weight !== weight ? set.weight + ' · ' + set.reps : String(set.reps);
+          weight = set.weight;
+          row.append(setChip(ex, x, set, label, host));
+        });
+        box.append(row, host);
+      });
+
+      // Same ID on a retry, so a save that half-worked can't count twice.
+      const pending = { id: newId(), sessionId: open ? open.id : newId() };
+      const lastSet = open && open.sets[open.sets.length - 1];
+      const prefill = lastSet ? lastSet.weight : (ex.plan && ex.plan.weight) || lastWeight(ex);
+      const actions = el('div', 'set-actions');
+      const addHost = el('div', 'set-host');
+      const add = el('button', 'set-chip add', sessions.length && !open ? '+ New session' : '+ Add Set');
+      add.type = 'button';
+      add.addEventListener('click', () => openForm(addHost, {
+        weight: prefill,
+        onSave: (reps, weight, fail) => setCall('saveSet', [{ id: pending.id, sessionId: pending.sessionId,
+          row: ex.target.row, name: ex.target.name, weight, reps }], 'Set saved', () => {
+          showUndo('Set saved: ' + reps, () => setCall('deleteSet', [pending.id], 'Set removed'));
+        }, err => fail(err.message)),
+      }));
+      actions.append(add);
+      if (!sessions.length || open) {
+        const complete = el('button', 'set-complete', 'Complete');
+        complete.type = 'button';
+        complete.addEventListener('click', () => {
+          if (open) {
+            complete.disabled = true;
+            setCall('setComplete', [open.id, true], 'Completed ' + ex.name, () => {
+              showUndo('Completed', () => setCall('setComplete', [open.id, false], 'Reopened ' + ex.name));
+            }, () => { complete.disabled = false; });
+            return;
+          }
+          if (!confirm('Mark "' + ex.name + '" done today with no sets?')) return;
+          complete.disabled = true;
+          setCall('logExercise', [ex.target.row, ex.target.name, ''], 'Completed ' + ex.name, null, () => { complete.disabled = false; });
+        });
+        actions.append(complete);
+      } else {
+        actions.append(el('span', 'set-done', '✓ Completed'));
+      }
+      box.append(actions, addHost);
+      return box;
     }
 
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1200,11 +1405,15 @@
       }
 
       // One row: its last two logs. Several rows: the newest log of each, newest row first.
+      // Today's set-by-set sessions show in the set box, so they're skipped here.
+      const todayCount = r => sessionsToday(ex).filter(x => x.row === r && x.text).length;
+      const older = s => (s.sets || []).slice(todayCount(s.row)).map(cleanEntry).filter(Boolean);
       const entries = ex.slots.length > 1
-        ? ex.recent.map(s => cleanEntry((s.sets || [])[0])).filter(Boolean)
-        : (ex.latest.sets || []).map(cleanEntry).filter(Boolean);
-      if (entries[0]) row('Prev', document.createTextNode(entries[0]));
-      if (entries[1]) row('Prev 2', document.createTextNode(entries[1]));
+        ? ex.recent.filter(s => !todayCount(s.row)).map(s => older(s)[0]).filter(Boolean)
+          .concat(...ex.recent.filter(s => todayCount(s.row)).map(s => older(s).slice(0, 1)))
+        : older(ex.latest);
+      if (entries[0]) row('Prev', document.createTextNode(withTotal(ex, entries[0])));
+      if (entries[1]) row('Prev 2', document.createTextNode(withTotal(ex, entries[1])));
       return facts.childNodes.length ? facts : null;
     }
 
@@ -1243,7 +1452,7 @@
         planned.push(Object.assign({}, ex, { plan: p }));
       });
       // Anything logged today stays in Today as a record, planned or not.
-      all.filter(ex => isDoneToday(ex) && !seen.has(ex.key)).forEach(ex => {
+      all.filter(ex => touchedToday(ex) && !seen.has(ex.key)).forEach(ex => {
         seen.add(ex.key);
         planned.push(Object.assign({}, ex, { plan: { row: ex.target.row, name: ex.target.name, logged: true } }));
       });
@@ -2231,7 +2440,7 @@
       const history = historyLine(ex);
       if (history) card.append(history);
       if (ex.plan && ex.plan.note) card.append(el('div', 'ex-note', ex.plan.note));
-      card.append(logBox(ex));
+      card.append(setBox(ex));
       return card;
     }
 

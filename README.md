@@ -48,7 +48,7 @@ Last updated: 2026-11-02
 - Claude-made plans (`plan.js`) show in Today on their date.
 
 **Logging**
-- Weight / band box (prefilled with the last weight) + Reps box → writes `25lbs: 20, 20` to the sheet: today's date in column B, newest entry in column D, older ones shift right.
+- Logs write to the sheet as `25lbs: 20, 20`: today's date in column B, newest entry in column D, older ones shift right.
 - Logs also kept in a 60-day history for the This week summary.
 
 **Extras**
@@ -56,6 +56,15 @@ Last updated: 2026-11-02
 - This week summary: plain-English suggestions (PT owed, areas untouched 7+ days, lopsided week).
 
 ## 🧪 To be confirmed (shipped 2026-10-26)
+
+**Set-by-set logging (2026-11-02)**
+- **+ Add Set** saves one set at a time and replaces the Log box. Weight stays prefilled, and sets show on the card as 20, 15, 15.
+- Tap a set to change or delete it. **Undo** appears for about 8 seconds after a save, change, delete or Complete.
+- Optional rep goal per exercise, with progress like 35 / 50 reps. You can go over it, and only **Complete** finishes the exercise.
+- The first set counts for recovery and the weekly boxes. Deleting every set in a session takes that back.
+- Complete with no sets marks it done with the date only. Forgetting Complete costs nothing.
+- Prev skips today and shows a total for sessions saved this way; older logs stay as written.
+- Sets are saved in a new `Sets` tab and goals in a `Goals` tab of the Ex sheet.
 
 **Suggested: least recent first (2026-11-02)**
 - Suggested runs top to bottom from the exercise touched least lately. Never-logged exercises rank highest. This replaces the fixed PT rotation.

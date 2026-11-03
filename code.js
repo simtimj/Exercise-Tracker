@@ -198,6 +198,19 @@ function appendHistory(list, todayIso, row) {
   return out.slice(-HISTORY_MAX);
 }
 
+function removeHistory(list, iso, row) {
+  const entry = iso + '|' + row;
+  return (Array.isArray(list) ? list : []).filter(e => e !== entry);
+}
+
+function dropHistory(iso, row) {
+  try {
+    PropertiesService.getUserProperties().setProperty(HISTORY_KEY, JSON.stringify(removeHistory(loadHistory(), iso, row)));
+  } catch (e) {
+    // Same as recordHistory: never block a save on the summary history.
+  }
+}
+
 function loadHistory() {
   try {
     const list = JSON.parse(PropertiesService.getUserProperties().getProperty(HISTORY_KEY) || '[]');
@@ -242,6 +255,9 @@ function getTrackerData() {
   result.plan = planFor(typeof TODAY_PLAN === 'undefined' ? null : TODAY_PLAN, result.today);
   result.picks = picksFor(loadPicks(), result.today);
   result.history = loadHistory();
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  result.sessions = summarizeSessions(readSetRows(ss), result.today);
+  result.goals = readGoals(ss);
   return result;
 }
 
@@ -391,30 +407,8 @@ function logExercise(row, name, entry) {
     if (current !== String(name).trim()) {
       throw new Error('Sheet changed (row ' + row + ' is now "' + current + '"). Reload and try again.');
     }
-    const today = new Date();
-
-    // Column B: swap in today's date, keep links / formulas / trailing text.
-    const bCell = sheet.getRange(row, 2);
-    const formula = bCell.getFormula();
-    if (formula) {
-      bCell.setFormula(DATE_RE.test(formula) ? formula.replace(DATE_RE, dateLabel(today)) : formula);
-    } else {
-      writeDateKeepingLinks(bCell, today);
-    }
-
-    // Columns D onward: new entry first, older ones pushed right.
-    if (entry) {
-      const width = Math.max(sheet.getLastColumn() - 3, 1);
-      const range = sheet.getRange(row, 4, 1, width);
-      const formulas = range.getFormulas()[0];
-      const old = range.getValues()[0].map((v, i) => formulas[i] || v);
-      const cells = buildSetCells(old, entry);
-      const needCols = 3 + cells.length;
-      if (needCols > sheet.getMaxColumns()) {
-        sheet.insertColumnsAfter(sheet.getMaxColumns(), needCols - sheet.getMaxColumns());
-      }
-      sheet.getRange(row, 4, 1, cells.length).setValues([cells]);
-    }
+    stampDate(sheet, row, new Date());
+    if (entry) addEntry(sheet, row, entry);
     SpreadsheetApp.flush();
     recordHistory(row);
   } finally {
@@ -423,22 +417,60 @@ function logExercise(row, name, entry) {
   return getTrackerData();
 }
 
+// Column B: swap in today's date, keep links / formulas / trailing text.
+function stampDate(sheet, row, today) {
+  const bCell = sheet.getRange(row, 2);
+  const formula = bCell.getFormula();
+  if (formula) {
+    bCell.setFormula(DATE_RE.test(formula) ? formula.replace(DATE_RE, dateLabel(today)) : formula);
+  } else {
+    writeDateKeepingLinks(bCell, today);
+  }
+}
+
+// Columns D onward: new entry first, older ones pushed right.
+function setCellsRange(sheet, row) {
+  return sheet.getRange(row, 4, 1, Math.max(sheet.getLastColumn() - 3, 1));
+}
+
+function oldSetCells(range) {
+  const formulas = range.getFormulas()[0];
+  return range.getValues()[0].map((v, i) => formulas[i] || v);
+}
+
+function addEntry(sheet, row, entry) {
+  const cells = buildSetCells(oldSetCells(setCellsRange(sheet, row)), entry);
+  const needCols = 3 + cells.length;
+  if (needCols > sheet.getMaxColumns()) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), needCols - sheet.getMaxColumns());
+  }
+  sheet.getRange(row, 4, 1, cells.length).setValues([cells]);
+}
+
 // Rewrites column B's text but keeps any hyperlinks in it.
 function writeDateKeepingLinks(cell, today) {
   const rich = cell.getRichTextValue();
   const oldText = rich ? rich.getText() : String(cell.getDisplayValue());
-  const newText = replaceDateText(oldText, today);
+  writeTextKeepingLinks(cell, replaceDateText(oldText, today));
+}
+
+// Only the changed middle moves; links before and after it keep their text.
+function writeTextKeepingLinks(cell, newText) {
+  const rich = cell.getRichTextValue();
+  const oldText = rich ? rich.getText() : String(cell.getDisplayValue());
   const links = rich ? rich.getRuns().filter(r => r.getLinkUrl()) : [];
-  if (!links.length) {
+  if (!links.length || !newText) {
     cell.setValue(newText);
     return;
   }
-  // Map old positions to new ones around the replaced date.
-  const m = oldText.match(DATE_RE);
-  const mStart = m ? m.index : 0;
-  const mEnd = m ? m.index + m[0].length : 0;
+  let start = 0;
+  while (start < oldText.length && start < newText.length && oldText[start] === newText[start]) start++;
+  let tail = 0;
+  while (tail < oldText.length - start && tail < newText.length - start
+    && oldText[oldText.length - 1 - tail] === newText[newText.length - 1 - tail]) tail++;
+  const mEnd = oldText.length - tail;
   const delta = newText.length - oldText.length;
-  const map = i => (i <= mStart ? i : i >= mEnd ? i + delta : Math.min(i, mStart + dateLabel(today).length));
+  const map = i => (i <= start ? i : i >= mEnd ? i + delta : Math.min(i, newText.length - tail));
   const builder = SpreadsheetApp.newRichTextValue().setText(newText);
   links.forEach(r => {
     const s = map(r.getStartIndex());
@@ -446,6 +478,292 @@ function writeDateKeepingLinks(cell, today) {
     if (e > s) builder.setLinkUrl(s, e, r.getLinkUrl());
   });
   cell.setRichTextValue(builder.build());
+}
+
+// ---------- Set-by-set logging (tabs "Sets" and "Goals" in the Ex sheet) ----------
+// Each set is one row in Sets. The V5 row stays readable: the first set stamps
+// column B and adds a D entry, later changes rewrite only that entry, and
+// deleting a session's last set puts column B back and removes the entry.
+
+const SETS_TAB = 'Sets';
+const GOALS_TAB = 'Goals';
+const SET_HEADERS = ['Set ID', 'Session ID', 'Date', 'Row', 'Exercise', 'Order', 'Weight', 'Reps', 'Created', 'Updated', 'Completed', 'Prior B', 'Last D'];
+const SET_COL = { updated: 10, completed: 11, priorB: 12, lastD: 13, weight: 7, reps: 8 };
+const REPS_MAX = 100000;
+
+function cleanReps(value) {
+  const text = String(value == null ? '' : value).trim();
+  const n = Number(text);
+  if (!/^\d+$/.test(text) || n <= 0 || n > REPS_MAX) throw new Error('Reps must be a whole number above 0.');
+  return n;
+}
+
+// [{weight:'25lbs',reps:20},{weight:'25lbs',reps:15}] -> "25lbs: 20, 15".
+// A weight change starts a new group: "25lbs: 20, 30lbs: 15".
+function entryFromSets(sets) {
+  const parts = [];
+  let weight = null;
+  sets.slice().sort((a, b) => a.order - b.order).forEach(s => {
+    const w = String(s.weight || '').trim();
+    parts.push(w !== weight && w ? w + ': ' + s.reps : String(s.reps));
+    weight = w;
+  });
+  return parts.join(', ');
+}
+
+function rowToSet(r, sheetRow) {
+  return {
+    sheetRow: sheetRow, id: r[0], session: r[1], date: r[2], row: Number(r[3]), name: r[4],
+    order: Number(r[5]), weight: r[6], reps: Number(r[7]), created: r[8], updated: r[9],
+    completed: r[10], priorB: r[11], lastD: r[12],
+  };
+}
+
+function readSetRows(ss) {
+  const tab = ss.getSheetByName(SETS_TAB);
+  if (!tab) return [];
+  return tab.getDataRange().getDisplayValues().slice(1).map((r, i) => rowToSet(r, i + 2)).filter(s => s.id);
+}
+
+// What the UI needs: today's sessions, plus the last two earlier ones per row.
+function summarizeSessions(setRows, today) {
+  const byId = {};
+  const sessions = [];
+  setRows.forEach(s => {
+    if (!byId[s.session]) {
+      sessions.push(byId[s.session] = {
+        id: s.session, date: s.date, row: s.row, name: s.name, created: s.created,
+        completed: Boolean(s.completed), text: s.lastD, sets: [],
+      });
+    }
+    if (s.created < byId[s.session].created) byId[s.session].created = s.created;
+    byId[s.session].sets.push({ id: s.id, order: s.order, weight: s.weight, reps: s.reps });
+  });
+  sessions.forEach(x => x.sets.sort((a, b) => a.order - b.order));
+  sessions.sort((a, b) => (a.date + a.created < b.date + b.created ? 1 : -1));
+  const earlier = {};
+  return sessions.filter(x => {
+    if (x.date === today) return true;
+    earlier[x.row] = (earlier[x.row] || 0) + 1;
+    return earlier[x.row] <= 2;
+  });
+}
+
+function setsTab(ss) {
+  let tab = ss.getSheetByName(SETS_TAB);
+  if (!tab) {
+    tab = ss.insertSheet(SETS_TAB);
+    tab.getRange(1, 1, tab.getMaxRows(), SET_HEADERS.length).setNumberFormat('@'); // keep dates etc. as typed
+    tab.getRange(1, 1, 1, SET_HEADERS.length).setValues([SET_HEADERS]);
+    tab.setFrozenRows(1);
+  }
+  return tab;
+}
+
+function withSheetLock(fn) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    fn(SpreadsheetApp.openById(SHEET_ID));
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  return getTrackerData();
+}
+
+function checkedRow(ss, row, name) {
+  const sheet = ss.getSheetByName(TAB_NAME);
+  const current = String(sheet.getRange(row, 3).getDisplayValue()).trim();
+  if (current !== String(name).trim()) {
+    throw new Error('Sheet changed (row ' + row + ' is now "' + current + '"). Reload and try again.');
+  }
+  return sheet;
+}
+
+// Column B as it was before a session. The prefix keeps formulas stored as text.
+function snapshotB(cell) {
+  const formula = cell.getFormula();
+  if (formula) return 'f:' + formula;
+  const rich = cell.getRichTextValue();
+  return 't:' + (rich ? rich.getText() : String(cell.getDisplayValue()));
+}
+
+function restoreB(cell, snapshot) {
+  const text = String(snapshot).slice(2);
+  if (String(snapshot).startsWith('f:')) cell.setFormula(text);
+  else writeTextKeepingLinks(cell, text);
+}
+
+// Moves the V5 row from oldText to newText ('' = no entry). opts.keepDate
+// leaves column B alone when another session today still needs that date.
+function applySession(sheet, row, oldText, newText, priorB, opts) {
+  if (!oldText) {
+    stampDate(sheet, row, new Date());
+    addEntry(sheet, row, newText);
+    return;
+  }
+  const range = setCellsRange(sheet, row);
+  const cells = oldSetCells(range);
+  const i = cells.findIndex(v => String(v).trim() === oldText);
+  if (i < 0) throw new Error('Sheet changed: "' + oldText + '" is no longer on row ' + row + '. Fix it in the sheet or reload.');
+  if (newText) {
+    sheet.getRange(row, 4 + i).setValue(newText);
+    return;
+  }
+  const kept = cells.slice(0, i).concat(cells.slice(i + 1));
+  kept.push('');
+  range.setValues([kept]);
+  if (!(opts && opts.keepDate)) restoreB(sheet.getRange(row, 2), priorB);
+}
+
+function sessionRows(all, sessionId) {
+  return all.filter(s => s.session === sessionId);
+}
+
+function writeLastD(tab, rows, text) {
+  rows.forEach(s => tab.getRange(s.sheetRow, SET_COL.lastD).setValue(text));
+}
+
+// Called by the UI. input = { id, sessionId, row, name, weight, reps }; undo
+// also passes order and completed. A repeated id changes nothing, so double
+// taps and retries save one set.
+function saveSet(input) {
+  const id = String((input && input.id) || '').trim();
+  if (!id) throw new Error('Missing set ID. Reload and try again.');
+  const reps = cleanReps(input.reps);
+  const weight = String(input.weight || '').trim().slice(0, 100);
+  return withSheetLock(ss => {
+    const row = Number(input.row);
+    const sheet = checkedRow(ss, row, input.name);
+    const tab = setsTab(ss);
+    const all = readSetRows(ss);
+    if (all.some(s => s.id === id)) return;
+    const now = new Date();
+    const today = isoDate(now);
+    let sessionId = String(input.sessionId || '').trim() || Utilities.getUuid();
+    let session = sessionRows(all, sessionId);
+    if (session.length && (session[0].date !== today || session[0].row !== row)) {
+      sessionId = Utilities.getUuid();
+      session = [];
+    }
+    const first = !session.length;
+    const priorB = first ? snapshotB(sheet.getRange(row, 2)) : session[0].priorB;
+    const oldText = first ? '' : session[0].lastD;
+    const nextOrder = session.reduce((n, s) => Math.max(n, s.order), 0) + 1;
+    const order = Number(input.order) > 0 ? Number(input.order) : nextOrder;
+    const newText = entryFromSets(session.concat({ order: order, weight: weight, reps: reps }));
+    const completed = first ? String(input.completed || '') : session[0].completed;
+    applySession(sheet, row, oldText, newText, priorB);
+    try {
+      tab.appendRow([id, sessionId, today, row, String(input.name).trim(), order, weight, reps,
+        now.toISOString(), now.toISOString(), completed, priorB, newText]);
+      writeLastD(tab, session, newText);
+    } catch (e) {
+      applySession(sheet, row, newText, oldText, priorB);
+      throw e;
+    }
+    if (first) recordHistory(row);
+  });
+}
+
+// Today's sets only: older sessions can't be changed from the app.
+function setForChange(all, id) {
+  const set = all.find(s => s.id === String(id));
+  if (set && set.date !== isoDate(new Date())) throw new Error('That set is from another day. Reload and try again.');
+  return set;
+}
+
+function editSet(id, reps, weight) {
+  const cleanRepsValue = cleanReps(reps);
+  const cleanWeight = String(weight || '').trim().slice(0, 100);
+  return withSheetLock(ss => {
+    const all = readSetRows(ss);
+    const set = setForChange(all, id);
+    if (!set) throw new Error('That set is gone. Reload and try again.');
+    const sheet = checkedRow(ss, set.row, set.name);
+    const tab = setsTab(ss);
+    const session = sessionRows(all, set.session);
+    const newText = entryFromSets(session.map(s => (s.id === set.id ? Object.assign({}, s, { reps: cleanRepsValue, weight: cleanWeight }) : s)));
+    applySession(sheet, set.row, set.lastD, newText, set.priorB);
+    tab.getRange(set.sheetRow, SET_COL.weight).setValue(cleanWeight);
+    tab.getRange(set.sheetRow, SET_COL.reps).setValue(cleanRepsValue);
+    tab.getRange(set.sheetRow, SET_COL.updated).setValue(new Date().toISOString());
+    writeLastD(tab, session, newText);
+  });
+}
+
+// Deleting the last set of a session also takes back its date and recovery
+// credit, unless another session today keeps them. A repeated delete does nothing.
+function deleteSet(id) {
+  return withSheetLock(ss => {
+    const all = readSetRows(ss);
+    const set = setForChange(all, id);
+    if (!set) return;
+    const sheet = checkedRow(ss, set.row, set.name);
+    const tab = setsTab(ss);
+    const rest = sessionRows(all, set.session).filter(s => s.id !== set.id);
+    const others = all.filter(s => s.row === set.row && s.date === set.date && s.session !== set.session);
+    const newText = rest.length ? entryFromSets(rest) : '';
+    const alreadyToday = String(set.priorB).includes(dateLabel(new Date()));
+    applySession(sheet, set.row, set.lastD, newText, set.priorB, { keepDate: others.length > 0 });
+    tab.deleteRow(set.sheetRow);
+    if (rest.length) {
+      // Row numbers below the deleted one moved up by one.
+      writeLastD(tab, rest.map(s => Object.assign({}, s, { sheetRow: s.sheetRow - (s.sheetRow > set.sheetRow ? 1 : 0) })), newText);
+    } else if (others.length) {
+      // This was the earlier session: the survivors inherit the older date.
+      if (!alreadyToday) {
+        others.forEach(s => tab.getRange(s.sheetRow - (s.sheetRow > set.sheetRow ? 1 : 0), SET_COL.priorB).setValue(set.priorB));
+      }
+    } else if (!alreadyToday) {
+      dropHistory(set.date, set.row);
+    }
+  });
+}
+
+// Complete only changes the session's status, never the sets or the date.
+function setComplete(sessionId, done) {
+  return withSheetLock(ss => {
+    const session = sessionRows(readSetRows(ss), String(sessionId));
+    if (!session.length) throw new Error('That session is gone. Reload and try again.');
+    const tab = setsTab(ss);
+    const value = done ? new Date().toISOString() : '';
+    session.forEach(s => tab.getRange(s.sheetRow, SET_COL.completed).setValue(value));
+  });
+}
+
+function readGoals(ss) {
+  const tab = ss.getSheetByName(GOALS_TAB);
+  if (!tab) return {};
+  const goals = {};
+  tab.getDataRange().getDisplayValues().slice(1).forEach(r => {
+    const reps = Number(r[2]);
+    if (r[0] && reps > 0) goals[r[0]] = reps;
+  });
+  return goals;
+}
+
+// reps blank = clear the goal. key = the app's exercise key.
+function saveGoal(key, name, reps) {
+  key = String(key || '').trim();
+  if (!key) throw new Error('Missing exercise. Reload and try again.');
+  const blank = String(reps == null ? '' : reps).trim() === '';
+  const value = blank ? 0 : cleanReps(reps);
+  return withSheetLock(ss => {
+    let tab = ss.getSheetByName(GOALS_TAB);
+    if (!tab) {
+      if (blank) return;
+      tab = ss.insertSheet(GOALS_TAB);
+      tab.getRange(1, 1, tab.getMaxRows(), 3).setNumberFormat('@');
+      tab.getRange(1, 1, 1, 3).setValues([['Exercise key', 'Exercise', 'Goal reps']]);
+      tab.setFrozenRows(1);
+    }
+    const at = tab.getDataRange().getDisplayValues().findIndex((r, i) => i > 0 && r[0] === key);
+    if (at > 0 && blank) tab.deleteRow(at + 1);
+    else if (at > 0) tab.getRange(at + 1, 3).setValue(value);
+    else if (!blank) tab.appendRow([key, String(name || ''), value]);
+  });
 }
 
 // ---------- App notes (temporary "Notes" side panel) ----------
@@ -500,5 +818,5 @@ function removeNote(i, text) {
 
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { pendingGroupRenames, renameFor, parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor, appendHistory };
+  module.exports = { pendingGroupRenames, renameFor, parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor, appendHistory, removeHistory, entryFromSets, summarizeSessions, cleanReps, logExercise, saveSet, editSet, deleteSet, setComplete, saveGoal, getTrackerData };
 }
