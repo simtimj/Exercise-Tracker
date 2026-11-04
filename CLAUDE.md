@@ -9,6 +9,11 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 - clasp only pushes `.js`, `.gs`, `.html` and `appsscript.json`; files like this one stay in GitHub only.
 - Most changes are made from a phone via Claude, so keep commits small and working — every push to `main` goes live.
 
+## To Confirm (2026-11-04, Julius: standing rule)
+
+- Every shipped change also gets a row in the `To Confirm` tab of New Gantt Sheet (`1D9aR_pJgddDdO5PD66IBlsDIIT_VbFKYfjvwccR08AE`): Date, Project `Exercise Tracker`, Change, How to check (one phone-testable line), Status blank. It shows in the Gantt's pinned To Confirm card.
+- Before new work here, tell Julius how many Exercise Tracker rows are still open plus the oldest 3. When he reports something broken, check the tab first and say plainly if it was never confirmed. Broken → Status `broken`; works → `works` + date, and move the README item from 🧪 to ✅.
+
 ## README is the feature list — always keep it current
 
 - `README.md` lists every feature under: ✅ Working · 🧪 To be confirmed · 🔧 To be improved · 📋 To do · 💤 Shelved, in plain language for Julius (this file keeps the technical detail).
