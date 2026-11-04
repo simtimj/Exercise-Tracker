@@ -871,9 +871,12 @@
       .spread-row .thumb { width: 28px; height: 28px; }
     }
 
-    /* Grid hide toggle sits at the right end of the tabs. */
-    .grid-tab.grid-min { margin-left: auto; }
-    body.grid-min .grid-tabs { margin-bottom: 0; }
+    /* Grid hide toggle: small round button top left, next to ↻ (Julius, 2026-11-04). */
+    #refresh-btn { margin-right: 0; }
+    #grid-tog { font-size: 13px; }
+    body.grid-min #pt-strip { display: none; }
+    /* All three grids stacked: PT, then Compound, then Isolation (2026-11-04). */
+    .grid-cat + .grid-cat { margin-top: 10px; }
 
     /* Simple view Today: two (or more) columns of compact cards
        (Julius, 2026-10-26: less scrolling, use the width). */
@@ -913,6 +916,7 @@
     <header>
       <h1>Exercise Tracker</h1>
       <a class="refresh-btn" id="refresh-btn" target="_top" role="button" title="Refresh" aria-label="Refresh">↻</a>
+      <button class="refresh-btn" id="grid-tog" type="button" title="Hide the grids" aria-label="Hide the grids">▴</button>
       <div id="status">Loading…</div>
       <div class="view-tabs" id="view-tabs">
         <button class="notes-btn" data-view="pick" type="button">Simple</button>
@@ -2606,72 +2610,64 @@
       const byCat = Object.fromEntries(GRID_CATS.map(c => [c, (sections.find(x => x.name === c) || { exercises: [] }).exercises]));
       if (!byCat.PT.length && !byCat.Compound.length && !byCat.Isolation.length) return;
 
-      // Tabs: PT · Compound · Isolation, each with its session count.
-      const tabs = el('div', 'grid-tabs');
-      GRID_CATS.forEach(c => {
-        if (!byCat[c].length) return;
-        const t = sessOf(byCat[c]);
-        const b = el('button', 'grid-tab' + (c === gridCat ? ' active' : ''));
-        b.type = 'button';
-        b.append(el('span', '', c), el('span', 'grid-tab-n', t.done + '/' + t.total));
-        b.addEventListener('click', () => {
-          if (c === gridCat && !gridMin) return;
-          gridCat = c;
-          if (gridMin) { gridMin = false; try { localStorage.setItem('gridMin', ''); } catch (e) {} }
-          gridOpen = null;
-          try { localStorage.setItem('gridCat', c); } catch (e) {}
-          render();
-        });
-        tabs.append(b);
-      });
-      // Hide / show the grid so the sticky header stays small (Julius, 2026-10-26).
-      const tog = el('button', 'grid-tab grid-min', gridMin ? '▾ Grid' : '▴ Hide');
-      tog.type = 'button';
-      tog.title = gridMin ? 'Show the grid' : 'Hide the grid';
-      tog.addEventListener('click', () => {
-        gridMin = !gridMin;
-        try { localStorage.setItem('gridMin', gridMin ? '1' : ''); } catch (e) {}
-        render();
-      });
-      tabs.append(tog);
-      strip.append(tabs);
       if (gridMin) { gridOpen = null; return; }
 
-      const list = byCat[gridCat];
-      if (!list.length) return;
-      const metAll = list.every(ex => ex.met);
-      const t = sessOf(list);
+      // All three grids stacked: PT, Compound, Isolation (Julius, 2026-11-04).
+      let openShown = false;
+      GRID_CATS.forEach(cat => {
+        const list = byCat[cat];
+        if (!list.length) return;
+        const sec = el('div', 'grid-cat');
+        const metAll = list.every(ex => ex.met);
+        const t = sessOf(list);
+        const isOpenCat = cat === gridCat;
 
-      // Total line — tap for every exercise in this category, grouped.
-      const line = el('button', 'pt-line pt-total' + (gridOpen === '*' ? ' open' : ''));
-      line.type = 'button';
-      line.title = 'Show all ' + gridCat;
-      const bar = segBar(list.map(ex => Math.min(1, ex.weekDone / ex.weekTarget)), metAll ? 'all' : '');
-      const count = el('span', 'pt-count', metAll ? 'all done ✓' : t.done + '/' + t.total + ' done');
-      line.append(el('span', 'pt-label', gridCat + ' this week'), bar, count);
-      line.addEventListener('click', () => { gridOpen = gridOpen === '*' ? null : '*'; render(); });
-      strip.append(line);
+        // Total line — tap for every exercise in this category, grouped.
+        const line = el('button', 'pt-line pt-total' + (isOpenCat && gridOpen === '*' ? ' open' : ''));
+        line.type = 'button';
+        line.title = 'Show all ' + cat;
+        const bar = segBar(list.map(ex => Math.min(1, ex.weekDone / ex.weekTarget)), metAll ? 'all' : '');
+        const count = el('span', 'pt-count', metAll ? 'all done ✓' : t.done + '/' + t.total + ' done');
+        line.append(el('span', 'pt-label', cat + ' this week'), bar, count);
+        line.addEventListener('click', () => {
+          gridOpen = isOpenCat && gridOpen === '*' ? null : '*';
+          gridCat = cat;
+          render();
+        });
+        sec.append(line);
 
-      // Muscle group grid — tap a group for what's left and what's done.
-      const groups = gridGroups(gridCat, list);
-      const grid = el('div', 'pt-groups');
-      groups.forEach(g => {
-        const s2 = sessOf(g.list);
-        const allMet = s2.done >= s2.total;
-        const f = groupFresh(g.list);
-        const row = el('button', 'pt-grp labeled ' + f.cls + (allMet ? ' met' : s2.done ? ' partial' : '')
-          + (g.solo ? ' solo' : '') + (gridOpen === g.name ? ' open' : ''));
-        row.type = 'button';
-        row.title = g.name + ' · ' + f.label + (f.days >= 30 ? '' : ' · last ' + daysLabel(f.days));
-        const name = el('span', 'pt-grp-name');
-        name.append(freshDot(f), document.createTextNode((allMet ? '✓ ' : '') + g.name));
-        const head = el('span', 'pt-grp-head');
-        head.append(name, el('span', 'pt-grp-n', s2.done + '/' + s2.total));
-        row.append(head, exLines(g.list));
-        row.addEventListener('click', () => { gridOpen = gridOpen === g.name ? null : g.name; render(); });
-        grid.append(row);
+        // Muscle group grid — tap a group for what's left and what's done.
+        const groups = gridGroups(cat, list);
+        const grid = el('div', 'pt-groups');
+        groups.forEach(g => {
+          const s2 = sessOf(g.list);
+          const allMet = s2.done >= s2.total;
+          const f = groupFresh(g.list);
+          const isOpen = isOpenCat && gridOpen === g.name;
+          const row = el('button', 'pt-grp labeled ' + f.cls + (allMet ? ' met' : s2.done ? ' partial' : '')
+            + (g.solo ? ' solo' : '') + (isOpen ? ' open' : ''));
+          row.type = 'button';
+          row.title = g.name + ' · ' + f.label + (f.days >= 30 ? '' : ' · last ' + daysLabel(f.days));
+          const name = el('span', 'pt-grp-name');
+          name.append(freshDot(f), document.createTextNode((allMet ? '✓ ' : '') + g.name));
+          const head = el('span', 'pt-grp-head');
+          head.append(name, el('span', 'pt-grp-n', s2.done + '/' + s2.total));
+          row.append(head, exLines(g.list));
+          row.addEventListener('click', () => {
+            gridOpen = isOpen ? null : g.name;
+            gridCat = cat;
+            render();
+          });
+          grid.append(row);
+        });
+        sec.append(grid);
+        if (isOpenCat && gridOpen && (gridOpen === '*' || groups.some(g => g.name === gridOpen))) {
+          sec.append(gridDetail(cat, groups));
+          openShown = true;
+        }
+        strip.append(sec);
       });
-      strip.append(grid);
+      if (!openShown) gridOpen = null;
       const legend = el('div', 'fresh-key');
       [['f-red', 'just done'], ['f-yellow', 'ready'], ['f-green', 'falling behind']].forEach(([c, l]) => {
         const k = el('span', '');
@@ -2684,8 +2680,6 @@
       pk.style.alignItems = 'center';
       legend.append(pk);
       strip.append(legend);
-      if (gridOpen && (gridOpen === '*' || groups.some(g => g.name === gridOpen))) strip.append(gridDetail(gridCat, groups));
-      else gridOpen = null;
     }
 
     // Chip tap: open the exercise's muscle group in the grid panel above and flash its row.
@@ -2845,6 +2839,10 @@
       renderPickBar();
       document.body.classList.toggle('pick-view', view === 'pick');
       document.body.classList.toggle('grid-min', gridMin);
+      const gt = document.getElementById('grid-tog');
+      gt.textContent = gridMin ? '▸' : '▴';
+      gt.title = gridMin ? 'Show the grids' : 'Hide the grids';
+      gt.setAttribute('aria-label', gt.title);
       document.body.classList.toggle('today-view', view === 'today');
       document.querySelectorAll('#view-tabs [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
       if (data.renames && data.renames.length) wrap.append(renameBanner(data.renames));
@@ -2959,6 +2957,12 @@
       document.documentElement.style.setProperty('--top-h', document.querySelector('.top').offsetHeight + 'px');
     }
     window.addEventListener('resize', setTopHeight);
+    // Hide / show the grids so the sticky header stays small (Julius, 2026-10-26; moved top left 2026-11-04).
+    document.getElementById('grid-tog').addEventListener('click', () => {
+      gridMin = !gridMin;
+      try { localStorage.setItem('gridMin', gridMin ? '1' : ''); } catch (e) {}
+      render();
+    });
 
     function scrollToZone(id) {
       const target = document.getElementById(id);

@@ -2,7 +2,7 @@
 
 Google Apps Script web app on top of the "Ex" Google Sheet (tab `V5: PT, Compound, Iso`). An easier UI than the sheet: what's been trained, what's falling behind, what to do today, and quick logging. The sheet stays the source of truth. Every push to `main` deploys automatically. Deeper technical notes live in `CLAUDE.md`.
 
-Last updated: 2026-11-02
+Last updated: 2026-11-04
 
 ## Status key
 
@@ -57,6 +57,10 @@ Last updated: 2026-11-02
 
 ## 🧪 To be confirmed (shipped 2026-10-26)
 
+**All grids stacked (2026-11-04)**
+- The PT · Compound · Isolation tabs are gone: all three "this week" grids now show at the top, one under the other (PT, then Compound, then Isolation). Tapping a total line or a muscle group still opens its panel, right under that category.
+- The hide button moved to the top left, next to ↻: **▴** hides all the grids, **▸** brings them back. Remembered on the device.
+
 **Set-by-set logging (2026-11-02)**
 - **+ Add Set** saves one set at a time and replaces the Log box. Weight stays prefilled, and sets show on the card as 20, 15, 15.
 - Tap a set to change or delete it. **Undo** appears for about 8 seconds after a save, change, delete or Complete.
@@ -73,7 +77,6 @@ Last updated: 2026-11-02
 
 **Simple view Today, compact (2026-10-26)**
 - Today cards sit two per row on a phone (more on a tablet), with smaller text and pictures; Prev 2 is hidden there to save space.
-- **▴ Hide** at the right of the PT · Compound · Isolation tabs folds the grid down to just the tabs, so the sticky header takes almost no room; **▾ Grid** (or tapping a tab) brings it back. Remembered on the device.
 
 - **⇄ swap** on each PT row at the top of Suggested: switch that slot to a Compound or Isolation pick for today.
 - Grid layout: groups fill the width in as many columns as fit (3 on a phone), short names with session boxes right after.
