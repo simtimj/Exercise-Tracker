@@ -57,6 +57,9 @@ Last updated: 2026-11-05
 
 ## 🧪 To be confirmed (shipped 2026-10-26)
 
+**Boxed Today cards (2026-11-05)**
+- Every card in Today has a full rounded border in its freshness color, with a light tint inside: green = falling behind (do this one), yellow = ready, red = just done / resting. Same colors as the grid dots, in Simple and Full.
+
 **Fold arrows on the grids (2026-11-05)**
 - Each "PT this week", "Compound this week" and "Isolation this week" line has an arrow on its left. **▾** folds that category so only its line (progress bar + count) shows; **▸** expands it again. Tapping a folded line also expands it.
 - Each category folds on its own (e.g. keep PT open, fold Compound and Isolation). Remembered on the device.

@@ -918,6 +918,22 @@
     body.pick-view #today-sec .log input,
     body.pick-view #today-sec .log input.weight { flex: 1 1 0; height: 34px; padding: 0 6px; }
     body.pick-view #today-sec .log button { flex: 1 1 100%; height: 32px; }
+    /* Today cards fully boxed in their freshness color (2026-11-05, Julius: make it obvious where to write and look):
+       green = falling behind (do this), yellow = ready, red = just done / resting. Same colors as the grid dots. */
+    #today-sec .ex,
+    #today-sec .grp > .ex + .ex,
+    body.pick-view #today-sec .grp > .ex,
+    body.pick-view #today-sec .grp > .ex + .ex {
+      border: 2px solid var(--fc, var(--border)) !important;
+      border-radius: 10px;
+      margin: 6px 0;
+      background: color-mix(in srgb, var(--fc, var(--border)) 8%, var(--card));
+    }
+    #today-sec .ex.f-green { --fc: hsl(135 50% 42%); }
+    #today-sec .ex.f-yellow { --fc: hsl(44 85% 52%); }
+    #today-sec .ex.f-red { --fc: hsl(0 65% 55%); }
+    body.pick-view #today-sec .grp { gap: 6px; }
+    body.pick-view #today-sec .grp > .ex { margin: 0; }
   </style>
 </head>
 
@@ -2412,6 +2428,7 @@
       card.dataset.key = ex.key;
       card.dataset.area = ex.area || '';
       card.style.setProperty('--hue', heatHue(ex.days, ex.recoveryDays));
+      card.classList.add(freshOf(ex.days, ex.recoveryDays).cls); // Today boxes use it (2026-11-05)
       const nameEl = el('div', 'ex-name');
       nameEl.append(exThumb(ex));
       if (pickable) {
