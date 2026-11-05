@@ -2,6 +2,7 @@
 
 Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal: an easier-to-use UI than the sheet that shows how recently each exercise / muscle group was trained, color-coded as a heat map.
 
+- **One topic per conversation** (Julius 2026-11-05, ADHD): when he jumps to a different job or app mid-session, suggest starting a new conversation for it, in one line, before diving in. Keep replies short and skimmable: lead with the answer, a few bullets, no walls of text.
 ## Deploy
 
 - Pushing to `main` runs `.github/workflows/deploy.yaml`: `clasp push --force`, then `clasp update-deployment $DEPLOYMENT_ID` (repo variable) so the live web app URL updates.
