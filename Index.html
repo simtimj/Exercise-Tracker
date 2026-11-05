@@ -720,6 +720,18 @@
     #pt-strip { margin-bottom: 14px; }
     #groups .section.focus { border: 3px solid var(--zone); }
     .fresh-key { flex-wrap: wrap; gap: 3px 10px; }
+    /* RPE: 1–10 per session + last session's hint (2026-11-05). */
+    .rpe-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-width: 0; }
+    .rpe-label { font-size: 11px; font-weight: 600; color: var(--muted); flex: 0 0 auto; }
+    .rpe-btns { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(22px, 1fr)); gap: 3px; }
+    .rpe-btn { height: 26px; padding: 0; font: inherit; font-size: 12px; font-weight: 600; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--card); color: var(--muted); cursor: pointer; }
+    .rpe-btn.on { background: var(--z-today); border-color: var(--z-today); color: #fff; }
+    .rpe-hint { font-size: 12px; font-weight: 600; margin: 2px 0 4px; }
+    .rpe-hint.rpe-up { color: hsl(135 45% 34%); }
+    .rpe-hint.rpe-keep { color: var(--muted); }
+    .rpe-hint.rpe-down { color: hsl(20 70% 45%); }
+    @media (prefers-color-scheme: dark) { .rpe-hint.rpe-up { color: hsl(135 45% 62%); } .rpe-hint.rpe-down { color: hsl(25 75% 62%); } }
     .fresh-key > span { white-space: nowrap; }
     .pt-detail {
       margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
@@ -1392,6 +1404,42 @@
       queueSave('deleteSet', [id], msg, 'set delete');
     }
 
+    function saveRPE(sessionId, rpe, msg) {
+      const session = findSession(sessionId);
+      if (session) session.rpe = rpe;
+      render();
+      queueSave('setRPE', [sessionId, rpe || ''], msg, 'RPE');
+    }
+
+    // Last earlier session's RPE → what to do this time (Julius, 2026-11-05).
+    function rpeHint(ex) {
+      const last = (data.sessions || []).filter(x => x.date !== data.today && x.rpe && onSlot(x, ex))
+        .sort((a, b) => (a.date + a.created < b.date + b.created ? 1 : -1))[0];
+      if (!last) return null;
+      const r = last.rpe;
+      const tip = r <= 6 ? 'easy · go up (weight or reps)' : r <= 8 ? 'keep the same' : 'hard · hold or drop a bit';
+      return el('div', 'rpe-hint rpe-' + (r <= 6 ? 'up' : r <= 8 ? 'keep' : 'down'), 'Last: RPE ' + r + ' · ' + tip);
+    }
+
+    // 1–10 effort buttons for a session. Tap the chosen one again to clear.
+    function rpeRow(session) {
+      const row = el('div', 'rpe-row');
+      row.append(el('span', 'rpe-label', 'RPE'));
+      const btns = el('div', 'rpe-btns');
+      for (let n = 1; n <= 10; n++) {
+        const b = el('button', 'rpe-btn' + (session.rpe === n ? ' on' : ''), String(n));
+        b.type = 'button';
+        b.title = 'Effort ' + n + ' of 10';
+        b.addEventListener('click', () => {
+          const v = session.rpe === n ? 0 : n;
+          saveRPE(session.id, v, v ? 'RPE ' + v + ' saved' : 'RPE cleared');
+        });
+        btns.append(b);
+      }
+      row.append(btns);
+      return row;
+    }
+
     function saveComplete(sessionId, done, msg) {
       localComplete(sessionId, done);
       render();
@@ -1536,6 +1584,8 @@
       const sessions = sessionsToday(ex);
       const total = sessions.reduce((n, x) => n + x.sets.reduce((m, set) => m + set.reps, 0), 0);
       box.append(goalLine(ex, total));
+      const hint = rpeHint(ex);
+      if (hint) box.append(hint);
       const open = sessions.filter(x => !x.completed).pop();
 
       sessions.forEach((x, i) => {
@@ -1549,6 +1599,8 @@
           row.append(setChip(ex, x, set, label, host));
         });
         box.append(row, host);
+        // Saved sets only (the server needs the session to exist).
+        if (x.sets.length && !x.sets.every(set => set.pending)) box.append(rpeRow(x));
       });
 
       // Same ID on a retry, so a save that half-worked can't count twice.

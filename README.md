@@ -65,6 +65,11 @@ Last updated: 2026-11-05
 **Boxed Today cards (2026-11-05)**
 - Every card in Today has a full rounded border in its freshness color, with a light tint inside: green = falling behind (do this one), yellow = ready, red = just done / resting. Same colors as the grid dots, in Simple and Full.
 
+**RPE: how hard it felt (2026-11-05)**
+- After you add a set, an **RPE 1–10** row shows under the sets. Tap how hard the exercise felt (once per session). Tap the same number again to clear it.
+- Next time, the card shows a tip from last time's RPE: **1–6** "easy · go up (weight or reps)" (green), **7–8** "keep the same", **9–10** "hard · hold or drop a bit" (orange).
+- Saved in a new **RPE** column at the end of the app's `Sets` tab. The V5 tab doesn't change.
+
 **Grids: side by side + "done last" gray (2026-11-05)**
 - PT and Compound now sit side by side (PT left, Compound right); Isolation stays full width under them. Tapping a group opens its panel full width under that row.
 - **Done last (gray):** anything you trained on your last 2 workout days shows gray (gray dot, gray boxes, gray name) once it's no longer resting — even after a week off. It means "you just did this, do other things first", so a week of only abs won't make abs look like the thing to do. Key under the grid: resting · done last · ready · falling behind.

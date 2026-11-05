@@ -494,9 +494,9 @@ function writeTextKeepingLinks(cell, newText) {
 
 const SETS_TAB = 'Sets';
 const GOALS_TAB = 'Goals';
-const SET_HEADERS = ['Set ID', 'Session ID', 'Date', 'Row', 'Exercise', 'Order', 'Weight', 'Reps', 'Created', 'Updated', 'Completed', 'Prior B', 'Last D'];
+const SET_HEADERS = ['Set ID', 'Session ID', 'Date', 'Row', 'Exercise', 'Order', 'Weight', 'Reps', 'Created', 'Updated', 'Completed', 'Prior B', 'Last D', 'RPE'];
 const SET_READ_ROWS = 1500;
-const SET_COL = { updated: 10, completed: 11, priorB: 12, lastD: 13, weight: 7, reps: 8 };
+const SET_COL = { updated: 10, completed: 11, priorB: 12, lastD: 13, weight: 7, reps: 8, rpe: 14 };
 const REPS_MAX = 100000;
 
 function cleanReps(value) {
@@ -523,7 +523,7 @@ function rowToSet(r, sheetRow) {
   return {
     sheetRow: sheetRow, id: r[0], session: r[1], date: r[2], row: Number(r[3]), name: r[4],
     order: Number(r[5]), weight: r[6], reps: Number(r[7]), created: r[8], updated: r[9],
-    completed: r[10], priorB: r[11], lastD: r[12],
+    completed: r[10], priorB: r[11], lastD: r[12], rpe: Number(r[13]) || 0,
   };
 }
 
@@ -535,7 +535,9 @@ function readSetRows(ss) {
   const last = tab.getLastRow();
   if (last < 2) return [];
   const start = Math.max(2, last - SET_READ_ROWS + 1);
-  return tab.getRange(start, 1, last - start + 1, SET_HEADERS.length).getDisplayValues()
+  // Older tabs may be narrower than SET_HEADERS (RPE added 2026-11-05).
+  const cols = Math.min(SET_HEADERS.length, tab.getMaxColumns());
+  return tab.getRange(start, 1, last - start + 1, cols).getDisplayValues()
     .map((r, i) => rowToSet(r, start + i)).filter(s => s.id);
 }
 
@@ -547,9 +549,10 @@ function summarizeSessions(setRows, today) {
     if (!byId[s.session]) {
       sessions.push(byId[s.session] = {
         id: s.session, date: s.date, row: s.row, name: s.name, created: s.created,
-        completed: Boolean(s.completed), text: s.lastD, sets: [],
+        completed: Boolean(s.completed), text: s.lastD, rpe: 0, sets: [],
       });
     }
+    if (s.rpe && !byId[s.session].rpe) byId[s.session].rpe = s.rpe;
     if (s.created < byId[s.session].created) byId[s.session].created = s.created;
     byId[s.session].sets.push({ id: s.id, order: s.order, weight: s.weight, reps: s.reps });
   });
@@ -685,7 +688,7 @@ function saveSet(input) {
     applySession(sheet, row, oldText, newText, priorB);
     try {
       tab.appendRow([id, sessionId, today, row, String(input.name).trim(), order, weight, reps,
-        now.toISOString(), now.toISOString(), completed, priorB, newText]);
+        now.toISOString(), now.toISOString(), completed, priorB, newText, first ? '' : (session[0].rpe || '')]);
       writeLastD(tab, session, newText);
     } catch (e) {
       applySession(sheet, row, newText, oldText, priorB);
@@ -758,6 +761,29 @@ function setComplete(sessionId, done) {
     const tab = setsTab(ss);
     const value = done ? new Date().toISOString() : '';
     writeColumn(tab, session, SET_COL.completed, value);
+  });
+}
+
+// RPE (rate of perceived exertion) for a whole session: 1–10, blank clears.
+// Stored on every set row of the session in the Sets tab's RPE column.
+function cleanRpe(value) {
+  const text = String(value == null ? '' : value).trim();
+  if (text === '') return '';
+  const n = Number(text);
+  if (!/^\d+$/.test(text) || n < 1 || n > 10) throw new Error('RPE must be 1 to 10.');
+  return n;
+}
+
+function setRPE(sessionId, rpe) {
+  const value = cleanRpe(rpe);
+  return sheetWrite(ss => {
+    const session = sessionRows(readSetRows(ss), String(sessionId));
+    if (!session.length) throw new Error('That session is gone. Reload and try again.');
+    const tab = setsTab(ss);
+    if (tab.getMaxColumns() < SET_COL.rpe) tab.insertColumnsAfter(tab.getMaxColumns(), SET_COL.rpe - tab.getMaxColumns());
+    const head = tab.getRange(1, SET_COL.rpe);
+    if (head.getDisplayValue() !== 'RPE') head.setValue('RPE');
+    writeColumn(tab, session, SET_COL.rpe, value);
   });
 }
 
@@ -846,5 +872,5 @@ function removeNote(i, text) {
 
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { readSetRows, writeColumn, pendingGroupRenames, renameFor, parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor, appendHistory, removeHistory, entryFromSets, summarizeSessions, cleanReps, logExercise, saveSet, editSet, deleteSet, setComplete, saveGoal, getTrackerData };
+  module.exports = { readSetRows, writeColumn, pendingGroupRenames, renameFor, parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor, appendHistory, removeHistory, entryFromSets, summarizeSessions, cleanReps, cleanRpe, setRPE, logExercise, saveSet, editSet, deleteSet, setComplete, saveGoal, getTrackerData };
 }
