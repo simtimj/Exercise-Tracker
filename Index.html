@@ -1224,6 +1224,11 @@
       : Date.now().toString(36) + Math.random().toString(36).slice(2));
     const tidyWeight = w => { w = String(w || '').trim(); return /^\d+(\.\d+)?$/.test(w) ? w + 'lbs' : w; };
     const validReps = v => /^\d+$/.test(String(v).trim()) && Number(v) > 0;
+    // "10, 10, 10" (or spaces / slashes) → [10, 10, 10]: one set per number (Julius, 2026-11-05).
+    const repsList = v => {
+      const parts = String(v || '').split(/[\s,\/]+/).filter(Boolean);
+      return parts.length && parts.every(validReps) ? parts.map(Number) : null;
+    };
 
     // Earlier sessions saved set by set get a total. Older text logs stay as written.
     function withTotal(ex, entry) {
@@ -1392,10 +1397,12 @@
       const reps = el('input', 'reps');
       reps.placeholder = 'Reps';
       reps.inputMode = 'numeric';
-      reps.pattern = '[0-9]*';
       reps.enterKeyHint = 'done';
       reps.value = opts.reps || '';
-      const save = el('button', 'primary', 'Save');
+      // Adding: "Append" (10, 10 adds two sets). Changing a set: "Update".
+      const saveLabel = opts.multi ? 'Append' : 'Update';
+      if (opts.multi) reps.placeholder = 'Reps (10, 10 = 2 sets)';
+      const save = el('button', 'primary', saveLabel);
       save.type = 'submit';
       const cancel = el('button', 'x', '✕');
       cancel.type = 'button';
@@ -1416,13 +1423,15 @@
       form.addEventListener('submit', e => {
         e.preventDefault();
         if (save.disabled) return;
-        if (!validReps(reps.value)) { err.textContent = 'Enter reps as a whole number above 0.'; reps.focus(); return; }
+        const list = repsList(reps.value);
+        if (!list) { err.textContent = 'Enter reps as whole numbers above 0, e.g. 10 or 10, 10.'; reps.focus(); return; }
+        if (list.length > 1 && !opts.multi) { err.textContent = 'One number when changing a set.'; reps.focus(); return; }
         err.textContent = '';
         save.disabled = true;
         save.textContent = '…';
-        opts.onSave(Number(reps.value), tidyWeight(weight.value), text => {
+        opts.onSave(opts.multi ? list : list[0], tidyWeight(weight.value), text => {
           save.disabled = false;
-          save.textContent = 'Save';
+          save.textContent = saveLabel;
           err.textContent = text;
         });
       });
@@ -1529,10 +1538,15 @@
       add.type = 'button';
       add.addEventListener('click', () => openForm(addHost, {
         weight: prefill,
-        onSave: (reps, weight) => {
-          saveNewSet({ id: pending.id, sessionId: pending.sessionId,
-            row: ex.target.row, name: ex.target.name, weight, reps }, 'Set saved');
-          showUndo('Set saved: ' + reps, () => saveDelete(pending.id, 'Set removed'));
+        multi: true,
+        onSave: (list, weight) => {
+          // One set per number; the first keeps the retry-safe pending ID.
+          const ids = list.map((r, i) => i ? newId() : pending.id);
+          list.forEach((reps, i) => saveNewSet({ id: ids[i], sessionId: pending.sessionId,
+            row: ex.target.row, name: ex.target.name, weight, reps },
+            list.length > 1 ? list.length + ' sets saved' : 'Set saved'));
+          showUndo((list.length > 1 ? list.length + ' sets saved: ' : 'Set saved: ') + list.join(', '),
+            () => ids.slice().reverse().forEach(id => saveDelete(id, list.length > 1 ? 'Sets removed' : 'Set removed')));
         },
       }));
       actions.append(add);

@@ -65,6 +65,11 @@ Last updated: 2026-11-05
 **Boxed Today cards (2026-11-05)**
 - Every card in Today has a full rounded border in its freshness color, with a light tint inside: green = falling behind (do this one), yellow = ready, red = just done / resting. Same colors as the grid dots, in Simple and Full.
 
+**Add Set: several sets at once + Append (2026-11-05)**
+- Type `10, 10` in the reps box and it adds 2 sets of 10; `10, 10, 10` adds 3, and so on. Spaces or slashes work too. No more "please match the requested format".
+- The add button now says **Append**. When changing an existing set it says **Update** and takes one number.
+- One Undo removes all the sets you just appended.
+
 **Condensed grids (2026-11-05)**
 - The grid takes about a third less space: 4 muscle groups per row on a phone (was 3), smaller boxes, tighter spacing.
 - Short labels in the grid: Up Back, SH, OBL, Hams, G Max, G Med, Up / Mid / Low Abs, Bi, Tri, R Delts. Exercises: Hip abd, Band wk, Knee rs, S plank, Lat rs, Calf, 1-arm. Tapping a group still shows the full names.
