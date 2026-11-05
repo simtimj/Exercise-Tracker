@@ -122,9 +122,14 @@ function cleanAreaDays(input) {
   return out;
 }
 
-function loadAreaDays() {
+// props = all user properties when the caller already read them.
+function readProp(props, key) {
+  return props ? props[key] : PropertiesService.getUserProperties().getProperty(key);
+}
+
+function loadAreaDays(props) {
   try {
-    return cleanAreaDays(JSON.parse(PropertiesService.getUserProperties().getProperty(AREA_DAYS_KEY) || '{}'));
+    return cleanAreaDays(JSON.parse(readProp(props, AREA_DAYS_KEY) || '{}'));
   } catch (e) {
     return {};
   }
@@ -162,9 +167,9 @@ function cleanPicks(p) {
   };
 }
 
-function loadPicks() {
+function loadPicks(props) {
   try {
-    return cleanPicks(JSON.parse(PropertiesService.getUserProperties().getProperty(PICKS_KEY) || '{}'));
+    return cleanPicks(JSON.parse(readProp(props, PICKS_KEY) || '{}'));
   } catch (e) {
     return cleanPicks(null);
   }
@@ -211,9 +216,9 @@ function dropHistory(iso, row) {
   }
 }
 
-function loadHistory() {
+function loadHistory(props) {
   try {
-    const list = JSON.parse(PropertiesService.getUserProperties().getProperty(HISTORY_KEY) || '[]');
+    const list = JSON.parse(readProp(props, HISTORY_KEY) || '[]');
     return Array.isArray(list) ? list.filter(e => typeof e === 'string') : [];
   } catch (e) {
     return [];
@@ -249,13 +254,15 @@ function getSheetData() {
 
 // Called by the UI: parsed groups + exercises with days since last trained.
 function getTrackerData() {
-  const rows = getSheetData();
-  const result = parseRows(rows, new Date(), loadAreaDays());
+  // One open, one properties read: every extra Google call here is felt on each load.
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const props = PropertiesService.getUserProperties().getProperties();
+  const rows = ss.getSheetByName(TAB_NAME).getDataRange().getDisplayValues();
+  const result = parseRows(rows, new Date(), loadAreaDays(props));
   result.renames = pendingGroupRenames(rows);
   result.plan = planFor(typeof TODAY_PLAN === 'undefined' ? null : TODAY_PLAN, result.today);
-  result.picks = picksFor(loadPicks(), result.today);
-  result.history = loadHistory();
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  result.picks = picksFor(loadPicks(props), result.today);
+  result.history = loadHistory(props);
   result.sessions = summarizeSessions(readSetRows(ss), result.today);
   result.goals = readGoals(ss);
   return result;
@@ -488,6 +495,7 @@ function writeTextKeepingLinks(cell, newText) {
 const SETS_TAB = 'Sets';
 const GOALS_TAB = 'Goals';
 const SET_HEADERS = ['Set ID', 'Session ID', 'Date', 'Row', 'Exercise', 'Order', 'Weight', 'Reps', 'Created', 'Updated', 'Completed', 'Prior B', 'Last D'];
+const SET_READ_ROWS = 1500;
 const SET_COL = { updated: 10, completed: 11, priorB: 12, lastD: 13, weight: 7, reps: 8 };
 const REPS_MAX = 100000;
 
@@ -519,10 +527,16 @@ function rowToSet(r, sheetRow) {
   };
 }
 
+// Only the newest rows: enough for today and the last two sessions per sheet
+// row, and it keeps saves from slowing down as the tab grows.
 function readSetRows(ss) {
   const tab = ss.getSheetByName(SETS_TAB);
   if (!tab) return [];
-  return tab.getDataRange().getDisplayValues().slice(1).map((r, i) => rowToSet(r, i + 2)).filter(s => s.id);
+  const last = tab.getLastRow();
+  if (last < 2) return [];
+  const start = Math.max(2, last - SET_READ_ROWS + 1);
+  return tab.getRange(start, 1, last - start + 1, SET_HEADERS.length).getDisplayValues()
+    .map((r, i) => rowToSet(r, start + i)).filter(s => s.id);
 }
 
 // What the UI needs: today's sessions, plus the last two earlier ones per row.
@@ -560,7 +574,9 @@ function setsTab(ss) {
   return tab;
 }
 
-function withSheetLock(fn) {
+// Writes only. The app shows sets right away and refreshes once its save
+// queue is empty, so a save doesn't reload the whole sheet.
+function sheetWrite(fn) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -569,6 +585,11 @@ function withSheetLock(fn) {
   } finally {
     lock.releaseLock();
   }
+  return true;
+}
+
+function withSheetLock(fn) {
+  sheetWrite(fn);
   return getTrackerData();
 }
 
@@ -621,8 +642,15 @@ function sessionRows(all, sessionId) {
   return all.filter(s => s.session === sessionId);
 }
 
+// One write call however many rows.
+function writeColumn(tab, rows, col, value) {
+  if (!rows.length) return;
+  const letter = String.fromCharCode(64 + col);
+  tab.getRangeList(rows.map(s => letter + s.sheetRow)).setValue(value);
+}
+
 function writeLastD(tab, rows, text) {
-  rows.forEach(s => tab.getRange(s.sheetRow, SET_COL.lastD).setValue(text));
+  writeColumn(tab, rows, SET_COL.lastD, text);
 }
 
 // Called by the UI. input = { id, sessionId, row, name, weight, reps }; undo
@@ -633,7 +661,7 @@ function saveSet(input) {
   if (!id) throw new Error('Missing set ID. Reload and try again.');
   const reps = cleanReps(input.reps);
   const weight = String(input.weight || '').trim().slice(0, 100);
-  return withSheetLock(ss => {
+  return sheetWrite(ss => {
     const row = Number(input.row);
     const sheet = checkedRow(ss, row, input.name);
     const tab = setsTab(ss);
@@ -677,7 +705,7 @@ function setForChange(all, id) {
 function editSet(id, reps, weight) {
   const cleanRepsValue = cleanReps(reps);
   const cleanWeight = String(weight || '').trim().slice(0, 100);
-  return withSheetLock(ss => {
+  return sheetWrite(ss => {
     const all = readSetRows(ss);
     const set = setForChange(all, id);
     if (!set) throw new Error('That set is gone. Reload and try again.');
@@ -696,7 +724,7 @@ function editSet(id, reps, weight) {
 // Deleting the last set of a session also takes back its date and recovery
 // credit, unless another session today keeps them. A repeated delete does nothing.
 function deleteSet(id) {
-  return withSheetLock(ss => {
+  return sheetWrite(ss => {
     const all = readSetRows(ss);
     const set = setForChange(all, id);
     if (!set) return;
@@ -724,12 +752,12 @@ function deleteSet(id) {
 
 // Complete only changes the session's status, never the sets or the date.
 function setComplete(sessionId, done) {
-  return withSheetLock(ss => {
+  return sheetWrite(ss => {
     const session = sessionRows(readSetRows(ss), String(sessionId));
     if (!session.length) throw new Error('That session is gone. Reload and try again.');
     const tab = setsTab(ss);
     const value = done ? new Date().toISOString() : '';
-    session.forEach(s => tab.getRange(s.sheetRow, SET_COL.completed).setValue(value));
+    writeColumn(tab, session, SET_COL.completed, value);
   });
 }
 
@@ -818,5 +846,5 @@ function removeNote(i, text) {
 
 // Lets the code run under Node for local tests; ignored by Apps Script.
 if (typeof module !== 'undefined') {
-  module.exports = { pendingGroupRenames, renameFor, parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor, appendHistory, removeHistory, entryFromSets, summarizeSessions, cleanReps, logExercise, saveSet, editSet, deleteSet, setComplete, saveGoal, getTrackerData };
+  module.exports = { readSetRows, writeColumn, pendingGroupRenames, renameFor, parseRows, parseSheetDate, recoveryDaysFor, areaFor, cleanAreaDays, replaceDateText, buildSetCells, planFor, notesFrom, cleanPicks, picksFor, appendHistory, removeHistory, entryFromSets, summarizeSessions, cleanReps, logExercise, saveSet, editSet, deleteSet, setComplete, saveGoal, getTrackerData };
 }

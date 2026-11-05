@@ -325,6 +325,7 @@
       border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text);
     }
     .set-chip.add { border-style: dashed; font-size: 14px; }
+    .set-chip.pending { opacity: .55; border-style: dashed; }
     .set-complete, .set-done { margin-left: auto; font-size: 14px; font-weight: 600; }
     .set-complete {
       height: 36px; padding: 0 12px; border-radius: 8px; background: var(--card); color: var(--text);
@@ -1214,12 +1215,143 @@
       return x ? entry + ' (' + x.sets.reduce((n, set) => n + set.reps, 0) + ' total)' : entry;
     }
 
-    // Saved data only appears after the server confirms it.
+    // Waits for the server; used for goals and date-only finishes.
     function setCall(name, args, msg, onOk, onFail) {
       setStatus('Saving…');
       google.script.run
-        .withSuccessHandler(result => { data = result; render(); setStatus(msg); if (onOk) onOk(); })
+        .withSuccessHandler(result => {
+          if (!savesBusy()) { data = result; render(); } // else the queue's refresh covers it
+          setStatus(msg);
+          if (onOk) onOk();
+        })
         .withFailureHandler(err => { setStatus('Error: ' + err.message); if (onFail) onFail(err); })[name](...args);
+    }
+
+    // Set saves: the change shows at once (dimmed until confirmed), writes go
+    // one at a time in order, and one refresh runs when the queue is empty.
+    // Set IDs come from the app, so a retry can't save a set twice.
+    const saveQueue = [];
+    let saving = false;
+    let saveGen = 0;
+    let idleTimer = null;
+    const savesBusy = () => saving || saveQueue.length > 0;
+    const PERMANENT_ERROR = /Reload|Sheet changed|Enter |Missing/i;
+
+    function queueSave(name, args, msg, label) {
+      saveQueue.push({ name, args, msg, label, tries: 0 });
+      saveGen++;
+      pumpSaves();
+    }
+
+    function pumpSaves() {
+      if (saving) return;
+      const job = saveQueue.shift();
+      if (!job) { refreshAfterSaves(); return; }
+      saving = true;
+      setStatus('Saving…');
+      const started = Date.now();
+      google.script.run
+        .withSuccessHandler(() => {
+          saving = false;
+          setStatus(job.msg + ' · ' + ((Date.now() - started) / 1000).toFixed(1) + 's');
+          pumpSaves();
+        })
+        .withFailureHandler(err => {
+          if (job.tries++ < 1 && !PERMANENT_ERROR.test(err.message)) {
+            setStatus('Retrying…');
+            saveQueue.unshift(job);
+            setTimeout(() => { saving = false; pumpSaves(); }, 1500);
+            return;
+          }
+          saving = false;
+          saveFailed = 'Not saved: ' + job.label + ' — ' + err.message;
+          setStatus(saveFailed);
+          pumpSaves();
+        })[job.name](...job.args);
+    }
+
+    let saveFailed = '';
+    function refreshAfterSaves() {
+      const gen = saveGen;
+      google.script.run
+        .withSuccessHandler(result => {
+          if (gen !== saveGen) return; // a newer save will refresh again
+          data = result;
+          renderWhenIdle();
+          if (saveFailed) { setStatus(saveFailed); saveFailed = ''; }
+        })
+        .withFailureHandler(() => setStatus('Saved, but the refresh failed. Tap ↻'))
+        .getTrackerData();
+    }
+
+    // Never redraw under a form he's typing in.
+    function renderWhenIdle() {
+      clearTimeout(idleTimer);
+      if (document.querySelector('.set-form')) { idleTimer = setTimeout(renderWhenIdle, 2000); return; }
+      render();
+    }
+
+    const findSession = id => (data.sessions || []).find(x => x.id === id);
+    function findSet(id) {
+      for (const session of data.sessions || []) {
+        const set = session.sets.find(s => s.id === id);
+        if (set) return { session, set };
+      }
+      return {};
+    }
+
+    function localAddSet(input) {
+      let session = findSession(input.sessionId);
+      if (!session) {
+        session = { id: input.sessionId, date: data.today, row: input.row, name: input.name,
+          created: new Date().toISOString(), completed: false, text: '', sets: [] };
+        (data.sessions = data.sessions || []).unshift(session);
+      }
+      if (input.completed) session.completed = true;
+      const order = input.order || session.sets.reduce((n, s) => Math.max(n, s.order), 0) + 1;
+      session.sets.push({ id: input.id, order, weight: input.weight, reps: input.reps, pending: true });
+      session.sets.sort((a, b) => a.order - b.order);
+    }
+
+    function localEditSet(id, reps, weight) {
+      const { set } = findSet(id);
+      if (set) Object.assign(set, { reps, weight, pending: true });
+    }
+
+    function localDeleteSet(id) {
+      const { session, set } = findSet(id);
+      if (!set) return;
+      session.sets.splice(session.sets.indexOf(set), 1);
+      if (!session.sets.length) data.sessions.splice(data.sessions.indexOf(session), 1);
+    }
+
+    function localComplete(sessionId, done) {
+      const session = findSession(sessionId);
+      if (session) session.completed = done;
+    }
+
+    function saveNewSet(input, msg) {
+      localAddSet(input);
+      render();
+      queueSave('saveSet', [input], msg, input.reps + ' reps');
+    }
+
+    function saveEdit(id, reps, weight, msg) {
+      localEditSet(id, reps, weight);
+      render();
+      queueSave('editSet', [id, reps, weight], msg, 'edit to ' + reps + ' reps');
+    }
+
+    function saveDelete(id, msg) {
+      localDeleteSet(id);
+      render();
+      queueSave('deleteSet', [id], msg, 'set delete');
+    }
+
+    function saveComplete(sessionId, done, msg) {
+      localComplete(sessionId, done);
+      render();
+      queueSave('setComplete', [sessionId, done], msg, done ? 'Complete' : 'Reopen');
     }
 
     let undoTimer = null;
@@ -1289,20 +1421,24 @@
     }
 
     function setChip(ex, session, set, label, host) {
-      const chip = el('button', 'set-chip', label);
+      const chip = el('button', 'set-chip' + (set.pending ? ' pending' : ''), label);
       chip.type = 'button';
       chip.setAttribute('aria-label', 'Edit set: ' + set.reps + ' reps');
       chip.addEventListener('click', () => openForm(host, {
         reps: set.reps,
         weight: set.weight,
-        onSave: (reps, weight, fail) => setCall('editSet', [set.id, reps, weight], 'Set updated', () => {
-          showUndo('Set updated', () => setCall('editSet', [set.id, set.reps, set.weight], 'Change undone'));
-        }, err => fail(err.message)),
-        onDelete: (form, btn) => setCall('deleteSet', [set.id], 'Set deleted', () => {
-          showUndo('Set deleted', () => setCall('saveSet', [{ id: set.id, sessionId: session.id,
-            row: session.row, name: session.name, weight: set.weight, reps: set.reps, order: set.order,
-            completed: session.completed ? new Date().toISOString() : '' }], 'Set restored'));
-        }, err => { btn.disabled = false; form.showError(err.message); }),
+        onSave: (reps, weight) => {
+          const before = { reps: set.reps, weight: set.weight };
+          saveEdit(set.id, reps, weight, 'Set updated');
+          showUndo('Set updated', () => saveEdit(set.id, before.reps, before.weight, 'Change undone'));
+        },
+        onDelete: () => {
+          const restore = { id: set.id, sessionId: session.id, row: session.row, name: session.name,
+            weight: set.weight, reps: set.reps, order: set.order,
+            completed: session.completed ? new Date().toISOString() : '' };
+          saveDelete(set.id, 'Set deleted');
+          showUndo('Set deleted', () => saveNewSet(restore, 'Set restored'));
+        },
       }));
       return chip;
     }
@@ -1377,10 +1513,11 @@
       add.type = 'button';
       add.addEventListener('click', () => openForm(addHost, {
         weight: prefill,
-        onSave: (reps, weight, fail) => setCall('saveSet', [{ id: pending.id, sessionId: pending.sessionId,
-          row: ex.target.row, name: ex.target.name, weight, reps }], 'Set saved', () => {
-          showUndo('Set saved: ' + reps, () => setCall('deleteSet', [pending.id], 'Set removed'));
-        }, err => fail(err.message)),
+        onSave: (reps, weight) => {
+          saveNewSet({ id: pending.id, sessionId: pending.sessionId,
+            row: ex.target.row, name: ex.target.name, weight, reps }, 'Set saved');
+          showUndo('Set saved: ' + reps, () => saveDelete(pending.id, 'Set removed'));
+        },
       }));
       actions.append(add);
       if (!sessions.length || open) {
@@ -1388,10 +1525,9 @@
         complete.type = 'button';
         complete.addEventListener('click', () => {
           if (open) {
-            complete.disabled = true;
-            setCall('setComplete', [open.id, true], 'Completed ' + ex.name, () => {
-              showUndo('Completed', () => setCall('setComplete', [open.id, false], 'Reopened ' + ex.name));
-            }, () => { complete.disabled = false; });
+            const name = ex.name;
+            saveComplete(open.id, true, 'Completed ' + name);
+            showUndo('Completed', () => saveComplete(open.id, false, 'Reopened ' + name));
             return;
           }
           if (!confirm('Mark "' + ex.name + '" done today with no sets?')) return;

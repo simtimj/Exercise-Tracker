@@ -57,6 +57,8 @@ Last updated: 2026-11-05
 
 ## 🧪 To be confirmed (shipped 2026-10-26)
 
+- **Instant set saves (2026-11-04)** — a set shows right away, dimmed until it's saved; saving keeps going in the background and you can log the next set straight away. If a save fails, the status line says `Not saved: …`. Status shows how long the save took, e.g. `Set saved · 1.3s`.
+
 **Tighter set logging (2026-11-05)**
 - After + Add Set, the Reps / Weight boxes and buttons stay inside the card (they used to push past its border in the two-across view). Everything is smaller and lined up: + Add Set and Complete side by side; on a narrow card Reps | Weight | ✕ on one row with Save under it; on a wide card it's all one row.
 
