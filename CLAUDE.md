@@ -9,6 +9,10 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 - clasp only pushes `.js`, `.gs`, `.html` and `appsscript.json`; files like this one stay in GitHub only.
 - Most changes are made from a phone via Claude, so keep commits small and working — every push to `main` goes live.
 
+## Shared rules
+
+- Follow the Google Doc "AI Coding Rules" (`15P-8IunZsQgEEF4Lr4BIjVuN6EN0rG-rYydEyzKPo-I`). This file wins where it's more specific.
+
 ## To Confirm (2026-11-04, Julius: standing rule)
 
 - Every shipped change also gets a row in the `To Confirm` tab of New Gantt Sheet (`1D9aR_pJgddDdO5PD66IBlsDIIT_VbFKYfjvwccR08AE`): Date, Project `Exercise Tracker`, Change, How to check (one phone-testable line), Status blank. It shows in the Gantt's pinned To Confirm card.
