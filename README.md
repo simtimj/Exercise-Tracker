@@ -2,7 +2,7 @@
 
 Google Apps Script web app on top of the "Ex" Google Sheet (tab `V5: PT, Compound, Iso`). An easier UI than the sheet: what's been trained, what's falling behind, what to do today, and quick logging. The sheet stays the source of truth. Every push to `main` deploys automatically. Deeper technical notes live in `CLAUDE.md`.
 
-Last updated: 2026-11-04
+Last updated: 2026-11-05
 
 ## Status key
 
@@ -56,6 +56,10 @@ Last updated: 2026-11-04
 - This week summary: plain-English suggestions (PT owed, areas untouched 7+ days, lopsided week).
 
 ## 🧪 To be confirmed (shipped 2026-10-26)
+
+**Fold arrows on the grids (2026-11-05)**
+- Each "PT this week", "Compound this week" and "Isolation this week" line has an arrow on its left. **▾** folds that category so only its line (progress bar + count) shows; **▸** expands it again. Tapping a folded line also expands it.
+- Each category folds on its own (e.g. keep PT open, fold Compound and Isolation). Remembered on the device.
 
 **All grids stacked (2026-11-04)**
 - The PT · Compound · Isolation tabs are gone: all three "this week" grids now show at the top, one under the other (PT, then Compound, then Isolation). Tapping a total line or a muscle group still opens its panel, right under that category.

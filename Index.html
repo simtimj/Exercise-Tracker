@@ -877,6 +877,16 @@
     body.grid-min #pt-strip { display: none; }
     /* All three grids stacked: PT, then Compound, then Isolation (2026-11-04). */
     .grid-cat + .grid-cat { margin-top: 10px; }
+    .grid-cat.folded + .grid-cat { margin-top: 6px; }
+    /* Fold arrow on each "<Cat> this week" line (Julius, 2026-11-05). */
+    .grid-cat-head { display: flex; align-items: center; gap: 2px; }
+    .grid-cat-head .pt-total { flex: 1; min-width: 0; width: auto; margin: -3px -4px -3px 0; }
+    .grid-fold {
+      flex: 0 0 auto; width: 24px; height: 24px; margin: -4px 0 -4px -6px; padding: 0;
+      font: inherit; font-size: 12px; line-height: 1; color: var(--muted);
+      background: transparent; border: 0; border-radius: 6px; cursor: pointer;
+    }
+    .grid-fold:hover, .grid-fold:focus-visible { background: var(--soft); color: var(--text); }
 
     /* Simple view Today: two (or more) columns of compact cards
        (Julius, 2026-10-26: less scrolling, use the width). */
@@ -2467,6 +2477,15 @@
     let gridMin = false;
     try { gridMin = localStorage.getItem('gridMin') === '1'; } catch (e) {}
     let gridOpen = null; // null, '*' (the whole category) or a group name
+    // Folded categories: only the "<Cat> this week" line shows (Julius, 2026-11-05).
+    let gridFold = new Set();
+    try { gridFold = new Set(JSON.parse(localStorage.getItem('gridFold') || '[]')); } catch (e) {}
+    function toggleFold(cat) {
+      if (gridFold.has(cat)) gridFold.delete(cat); else gridFold.add(cat);
+      if (gridFold.has(cat) && gridCat === cat) gridOpen = null;
+      try { localStorage.setItem('gridFold', JSON.stringify([...gridFold])); } catch (e) {}
+      render();
+    }
 
     // Sessions this week: an exercise done 2×/wk counts twice.
     const sessOf = list => ({
@@ -2621,20 +2640,35 @@
         const metAll = list.every(ex => ex.met);
         const t = sessOf(list);
         const isOpenCat = cat === gridCat;
+        const folded = gridFold.has(cat);
+        if (folded) sec.classList.add('folded');
 
-        // Total line — tap for every exercise in this category, grouped.
-        const line = el('button', 'pt-line pt-total' + (isOpenCat && gridOpen === '*' ? ' open' : ''));
+        // Arrow: fold this category down to just its total line, or expand it.
+        const head = el('div', 'grid-cat-head');
+        const fold = el('button', 'grid-fold', folded ? '▸' : '▾');
+        fold.type = 'button';
+        fold.title = (folded ? 'Expand ' : 'Collapse ') + cat;
+        fold.setAttribute('aria-label', fold.title);
+        fold.setAttribute('aria-expanded', folded ? 'false' : 'true');
+        fold.addEventListener('click', () => toggleFold(cat));
+
+        // Total line — tap for every exercise in this category, grouped
+        // (when folded, tapping it expands the category instead).
+        const line = el('button', 'pt-line pt-total' + (isOpenCat && gridOpen === '*' && !folded ? ' open' : ''));
         line.type = 'button';
-        line.title = 'Show all ' + cat;
+        line.title = folded ? 'Expand ' + cat : 'Show all ' + cat;
         const bar = segBar(list.map(ex => Math.min(1, ex.weekDone / ex.weekTarget)), metAll ? 'all' : '');
         const count = el('span', 'pt-count', metAll ? 'all done ✓' : t.done + '/' + t.total + ' done');
         line.append(el('span', 'pt-label', cat + ' this week'), bar, count);
         line.addEventListener('click', () => {
+          if (folded) { toggleFold(cat); return; }
           gridOpen = isOpenCat && gridOpen === '*' ? null : '*';
           gridCat = cat;
           render();
         });
-        sec.append(line);
+        head.append(fold, line);
+        sec.append(head);
+        if (folded) { strip.append(sec); return; }
 
         // Muscle group grid — tap a group for what's left and what's done.
         const groups = gridGroups(cat, list);
@@ -2668,6 +2702,7 @@
         strip.append(sec);
       });
       if (!openShown) gridOpen = null;
+      if (GRID_CATS.every(c => !byCat[c].length || gridFold.has(c))) return; // all folded: no key
       const legend = el('div', 'fresh-key');
       [['f-red', 'just done'], ['f-yellow', 'ready'], ['f-green', 'falling behind']].forEach(([c, l]) => {
         const k = el('span', '');
