@@ -684,6 +684,20 @@
     .pt-grp.labeled .pt-grp-head { gap: 6px; }
     .pt-grp.labeled .pt-grp-name { flex: 0 1 auto; }
     .gx-name { flex: 0 0 5.4em; }
+    /* Condensed grid (Julius, 2026-11-05: still lots of room): short labels,
+       narrower name column and cells, tighter gaps — 4 groups per row on a phone. */
+    .pt-groups { grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); column-gap: 6px; row-gap: 5px; margin-top: 4px; }
+    .pt-grp { padding: 2px 3px; margin: -2px -3px; }
+    .pt-grp.labeled { gap: 1px; }
+    .pt-grp.labeled .pt-grp-head { gap: 4px; }
+    .pt-grp.labeled .pt-grp-name { font-size: 10px; letter-spacing: 0.02em; gap: 3px; }
+    .pt-grp-n { font-size: 10px; }
+    .pt-grp .fdot { width: 6px; height: 6px; }
+    .gx { gap: 3px; }
+    .gx-name { flex: 0 0 4.8em; font-size: 10.5px; line-height: 1.25; }
+    .gx-cells { gap: 1.5px; }
+    .gx-cells .seg { flex: 0 0 9px; height: 7px; }
+    .grid-cat + .grid-cat { margin-top: 6px; }
     .pt-detail {
       margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
       background: var(--card); font-size: 13px;
@@ -2713,15 +2727,23 @@
     // Order matters: more specific patterns first.
     const SHORT_NAMES = [
       [/glute bridge/i, 'Bridge'], [/romanian|\brdl\b/i, 'RDL'], [/bulgarian/i, 'BSS'],
-      [/step ?ups?/i, 'Step up'], [/side ?lying/i, 'Side-lying'], [/band walk/i, 'Band walk'],
+      [/step ?ups?/i, 'Step up'], [/side ?lying/i, 'Hip abd'], [/band walk/i, 'Band wk'],
       [/clam/i, 'Clams'], [/dead ?bug/i, 'Dead bug'], [/bird ?dog/i, 'Bird dog'],
       [/pull ?ups?/i, 'Pull up'], [/incline/i, 'Incline'], [/bench press/i, 'Bench'],
-      [/one-?arm/i, '1-arm row'], [/barbell row/i, 'Row'], [/overhead press/i, 'OHP'],
+      [/one-?arm/i, '1-arm'], [/barbell row/i, 'Row'], [/overhead press/i, 'OHP'],
       [/walking lunge/i, 'Lunge'], [/^squat/i, 'Squat'], [/ab wheel/i, 'Ab wheel'],
-      [/hanging knee/i, 'Knee raise'], [/decline crunch/i, 'Crunch'], [/side plank/i, 'Side plank'],
-      [/lateral raise/i, 'Lat raise'], [/bicep curl/i, 'Curl'], [/tricep.*ext/i, 'Tri ext'],
-      [/calf/i, 'Calf raise'], [/rear delt/i, 'Rear fly'],
+      [/hanging knee/i, 'Knee rs'], [/decline crunch/i, 'Crunch'], [/side plank/i, 'S plank'],
+      [/lateral raise/i, 'Lat rs'], [/bicep curl/i, 'Curl'], [/tricep.*ext/i, 'Tri ext'],
+      [/calf/i, 'Calf'], [/rear delt/i, 'Rear fly'],
     ];
+    // Short muscle group labels for the grid only (Julius, 2026-11-05: save room).
+    // Full names stay in the tap panel and tooltips.
+    const GROUP_SHORT = {
+      'Upper Back': 'Up Back', 'Shoulders': 'SH', 'Obliques': 'OBL', 'Hamstrings': 'Hams',
+      'Glute Max': 'G Max', 'Glute Med': 'G Med', 'Upper Abs': 'Up Abs', 'Middle Abs': 'Mid Abs',
+      'Lower Abs': 'Low Abs', 'Biceps': 'Bi', 'Triceps': 'Tri', 'Rear Delts': 'R Delts',
+    };
+    const groupShort = g => GROUP_SHORT[g] || g;
     function shortName(name) {
       const hit = SHORT_NAMES.find(([re]) => re.test(name));
       if (hit) return hit[1];
@@ -2874,7 +2896,7 @@
           row.type = 'button';
           row.title = g.name + ' · ' + f.label + (f.days >= 30 ? '' : ' · last ' + daysLabel(f.days));
           const name = el('span', 'pt-grp-name');
-          name.append(freshDot(f), document.createTextNode((allMet ? '✓ ' : '') + g.name));
+          name.append(freshDot(f), document.createTextNode((allMet ? '✓ ' : '') + groupShort(g.name)));
           const head = el('span', 'pt-grp-head');
           head.append(name, el('span', 'pt-grp-n', s2.done + '/' + s2.total));
           row.append(head, exLines(g.list));

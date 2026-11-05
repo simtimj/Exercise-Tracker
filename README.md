@@ -65,6 +65,10 @@ Last updated: 2026-11-05
 **Boxed Today cards (2026-11-05)**
 - Every card in Today has a full rounded border in its freshness color, with a light tint inside: green = falling behind (do this one), yellow = ready, red = just done / resting. Same colors as the grid dots, in Simple and Full.
 
+**Condensed grids (2026-11-05)**
+- The grid takes about a third less space: 4 muscle groups per row on a phone (was 3), smaller boxes, tighter spacing.
+- Short labels in the grid: Up Back, SH, OBL, Hams, G Max, G Med, Up / Mid / Low Abs, Bi, Tri, R Delts. Exercises: Hip abd, Band wk, Knee rs, S plank, Lat rs, Calf, 1-arm. Tapping a group still shows the full names.
+
 **Grids scroll with the page (2026-11-05)**
 - The PT / Compound / Isolation grids are no longer pinned at the top. Scroll down and they go off screen like everything else; only the title bar (↻, Simple / Full) stays pinned.
 
