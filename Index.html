@@ -698,6 +698,29 @@
     .gx-cells { gap: 1.5px; }
     .gx-cells .seg { flex: 0 0 9px; height: 7px; }
     .grid-cat + .grid-cat { margin-top: 6px; }
+    /* PT | Compound side by side, Isolation full width under them (2026-11-05). */
+    .grid-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 12px; align-items: start; }
+    .grid-pair .grid-cat + .grid-cat { margin-top: 0; }
+    .grid-pair + .grid-cat, .grid-pair + .pt-detail + .grid-cat { margin-top: 8px; }
+    .grid-pair .pt-line .pt-label { min-width: 0; }
+    .grid-pair .pt-line { gap: 5px; }
+    .grid-pair .pt-groups { grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); }
+    /* Easier to read (2026-11-05: "visibility is pretty low"). */
+    .pt-groups { color: var(--text); }
+    .pt-grp.labeled .pt-grp-name { opacity: 0.85; }
+    .pt-grp-n { color: var(--muted); }
+    /* Done last: cooled down, but trained in the last 2 sessions — gray, do others first. */
+    .fdot.f-last { background: hsl(260 6% 62%); }
+    .pt-grp.f-last .pt-grp-name { color: var(--muted); }
+    .pt-grp:not(.f-red) .gx.recent .seg.full { background: hsl(260 6% 62%); }
+    .pt-grp:not(.f-red) .gx.recent .seg:not(.full):not(.plan):not(.next) { background: hsl(260 8% 84%); box-shadow: none; }
+    @media (prefers-color-scheme: dark) { .pt-grp:not(.f-red) .gx.recent .seg:not(.full):not(.plan):not(.next) { background: hsl(260 6% 34%); } }
+    .pt-grp:not(.f-red) .gx.recent .gx-name { color: var(--muted); }
+    /* Breathing room under the grids, and Today fully outlined in its purple. */
+    #pt-strip { margin-bottom: 14px; }
+    #groups .section.focus { border: 3px solid var(--zone); }
+    .fresh-key { flex-wrap: wrap; gap: 3px 10px; }
+    .fresh-key > span { white-space: nowrap; }
     .pt-detail {
       margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
       background: var(--card); font-size: 13px;
@@ -2696,6 +2719,8 @@
     let gridMin = false;
     try { gridMin = localStorage.getItem('gridMin') === '1'; } catch (e) {}
     let gridOpen = null; // null, '*' (the whole category) or a group name
+    const RECENT_DAYS = 2; // "done last" = trained on one of the last 2 training days
+    let recentKeys = new Set();
     // Folded categories: only the "<Cat> this week" line shows (Julius, 2026-11-05).
     let gridFold = new Set();
     try { gridFold = new Set(JSON.parse(localStorage.getItem('gridFold') || '[]')); } catch (e) {}
@@ -2773,8 +2798,9 @@
         // purple "planned" cell (Today's color, not a freshness color).
         const planned = todayKeys.has(ex.key) && ex.days !== 0;
         const queued = !planned && upNextKeys.has(ex.key) && ex.days !== 0 && !ex.met;
-        const line = el('div', 'gx' + (ex.met ? ' met' : '') + (planned ? ' planned' : '') + (queued ? ' upnext' : ''));
-        line.title = ex.name + (planned ? ' · in Today' : queued ? ' · up next' : '');
+        const recent = recentKeys.has(ex.key);
+        const line = el('div', 'gx' + (ex.met ? ' met' : '') + (planned ? ' planned' : '') + (queued ? ' upnext' : '') + (recent ? ' recent' : ''));
+        line.title = ex.name + (planned ? ' · in Today' : queued ? ' · up next' : '') + (recent ? ' · done last' : '');
         const cells = el('span', 'gx-cells');
         const nextCell = Math.min(ex.weekDone, ex.weekTarget - 1);
         for (let i = 0; i < ex.weekTarget; i++) {
@@ -2858,12 +2884,22 @@
 
       if (gridMin) { gridOpen = null; return; }
 
-      // All three grids stacked: PT, Compound, Isolation (Julius, 2026-11-04).
+      // "Done last" (Julius, 2026-11-05): exercises from the last RECENT_DAYS
+      // training days, even once they've cooled down — do other things first.
+      const all = [].concat(byCat.PT, byCat.Compound, byCat.Isolation);
+      const lastDays = [...new Set(all.filter(ex => !ex.noDate).map(ex => ex.days))].sort((a, b) => a - b).slice(0, RECENT_DAYS);
+      recentKeys = new Set(all.filter(ex => !ex.noDate && lastDays.includes(ex.days)).map(ex => ex.key));
+
+      // PT and Compound side by side, Isolation full width under them (Julius, 2026-11-05).
+      const pairOn = byCat.PT.length > 0 && byCat.Compound.length > 0;
       let openShown = false;
+      const blocks = {};
       GRID_CATS.forEach(cat => {
         const list = byCat[cat];
         if (!list.length) return;
+        const half = pairOn && cat !== 'Isolation';
         const sec = el('div', 'grid-cat');
+        blocks[cat] = { sec, detail: null };
         const metAll = list.every(ex => ex.met);
         const t = sessOf(list);
         const isOpenCat = cat === gridCat;
@@ -2885,8 +2921,8 @@
         line.type = 'button';
         line.title = folded ? 'Expand ' + cat : 'Show all ' + cat;
         const bar = segBar(list.map(ex => Math.min(1, ex.weekDone / ex.weekTarget)), metAll ? 'all' : '');
-        const count = el('span', 'pt-count', metAll ? 'all done ✓' : t.done + '/' + t.total + ' done');
-        line.append(el('span', 'pt-label', cat + ' this week'), bar, count);
+        const count = el('span', 'pt-count', metAll ? (half ? '✓' : 'all done ✓') : t.done + '/' + t.total + (half ? '' : ' done'));
+        line.append(el('span', 'pt-label', half ? cat : cat + ' this week'), bar, count);
         line.addEventListener('click', () => {
           if (folded) { toggleFold(cat); return; }
           gridOpen = isOpenCat && gridOpen === '*' ? null : '*';
@@ -2895,7 +2931,7 @@
         });
         head.append(fold, line);
         sec.append(head);
-        if (folded) { strip.append(sec); return; }
+        if (folded) return;
 
         // Muscle group grid — tap a group for what's left and what's done.
         const groups = gridGroups(cat, list);
@@ -2903,7 +2939,9 @@
         groups.forEach(g => {
           const s2 = sessOf(g.list);
           const allMet = s2.done >= s2.total;
-          const f = groupFresh(g.list);
+          let f = groupFresh(g.list);
+          // Cooled down but done last: gray, so it waits behind everything else.
+          if (f.cls !== 'f-red' && g.list.some(ex => recentKeys.has(ex.key))) f = Object.assign({}, f, { cls: 'f-last', label: 'done last · do others first' });
           const isOpen = isOpenCat && gridOpen === g.name;
           const row = el('button', 'pt-grp labeled ' + f.cls + (allMet ? ' met' : s2.done ? ' partial' : '')
             + (g.solo ? ' solo' : '') + (isOpen ? ' open' : ''));
@@ -2923,15 +2961,27 @@
         });
         sec.append(grid);
         if (isOpenCat && gridOpen && (gridOpen === '*' || groups.some(g => g.name === gridOpen))) {
-          sec.append(gridDetail(cat, groups));
+          blocks[cat].detail = gridDetail(cat, groups);
           openShown = true;
         }
-        strip.append(sec);
+      });
+      // Panels open full width under their row.
+      if (pairOn) {
+        const pair = el('div', 'grid-pair');
+        pair.append(blocks.PT.sec, blocks.Compound.sec);
+        strip.append(pair);
+        [blocks.PT.detail, blocks.Compound.detail].forEach(d => d && strip.append(d));
+      }
+      GRID_CATS.forEach(cat => {
+        const b = blocks[cat];
+        if (!b || (pairOn && cat !== 'Isolation')) return;
+        strip.append(b.sec);
+        if (b.detail) strip.append(b.detail);
       });
       if (!openShown) gridOpen = null;
       if (GRID_CATS.every(c => !byCat[c].length || gridFold.has(c))) return; // all folded: no key
       const legend = el('div', 'fresh-key');
-      [['f-red', 'just done'], ['f-yellow', 'ready'], ['f-green', 'falling behind']].forEach(([c, l]) => {
+      [['f-red', 'resting'], ['f-last', 'done last'], ['f-yellow', 'ready'], ['f-green', 'falling behind']].forEach(([c, l]) => {
         const k = el('span', '');
         k.append(freshDot({ cls: c, label: l }), document.createTextNode(l));
         legend.append(k);
