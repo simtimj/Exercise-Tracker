@@ -57,6 +57,9 @@ Last updated: 2026-11-05
 
 ## 🧪 To be confirmed (shipped 2026-10-26)
 
+**Tighter set logging (2026-11-05)**
+- After + Add Set, the Reps / Weight boxes and buttons stay inside the card (they used to push past its border in the two-across view). Everything is smaller and lined up: + Add Set and Complete side by side; on a narrow card Reps | Weight | ✕ on one row with Save under it; on a wide card it's all one row.
+
 **Boxed Today cards (2026-11-05)**
 - Every card in Today has a full rounded border in its freshness color, with a light tint inside: green = falling behind (do this one), yellow = ready, red = just done / resting. Same colors as the grid dots, in Simple and Full.
 
