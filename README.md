@@ -28,7 +28,7 @@ Last updated: 2026-11-05
 - Days since last trained on every exercise; facts block: Last, This wk (dots + days done), Prev, Prev 2.
 - Muscle group names cleaned up (one-time "Apply to sheet" banner when column A doesn't match).
 
-**This week grids** (sticky, the center of the app)
+**This week grids** (the center of the app; they scroll with the page)
 - Tabs PT · Compound · Isolation with session counts; grid of muscle groups by body part, one box per session.
 - Freshness dots: red = just done / resting, yellow = ready, green = falling behind (do this one).
 - Tap the total line for all exercises, or a group for just that group (with + Today / + Next).
@@ -64,6 +64,9 @@ Last updated: 2026-11-05
 
 **Boxed Today cards (2026-11-05)**
 - Every card in Today has a full rounded border in its freshness color, with a light tint inside: green = falling behind (do this one), yellow = ready, red = just done / resting. Same colors as the grid dots, in Simple and Full.
+
+**Grids scroll with the page (2026-11-05)**
+- The PT / Compound / Isolation grids are no longer pinned at the top. Scroll down and they go off screen like everything else; only the title bar (↻, Simple / Full) stays pinned.
 
 **Fold arrows on the grids (2026-11-05)**
 - Each "PT this week", "Compound this week" and "Isolation this week" line has an arrow on its left. **▾** folds that category so only its line (progress bar + count) shows; **▸** expands it again. Tapping a folded line also expands it.
