@@ -721,12 +721,12 @@
     #groups .section.focus { border: 3px solid var(--zone); }
     .fresh-key { flex-wrap: wrap; gap: 3px 10px; }
     /* RPE: 1–10 per session + last session's hint (2026-11-05). */
-    .rpe-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-width: 0; }
-    .rpe-label { font-size: 11px; font-weight: 600; color: var(--muted); flex: 0 0 auto; }
-    .rpe-btns { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(22px, 1fr)); gap: 3px; }
-    .rpe-btn { height: 26px; padding: 0; font: inherit; font-size: 12px; font-weight: 600; border: 1px solid var(--border);
-      border-radius: 6px; background: var(--card); color: var(--muted); cursor: pointer; }
-    .rpe-btn.on { background: var(--z-today); border-color: var(--z-today); color: #fff; }
+    .rpe-row { display: flex; align-items: center; gap: 3px; min-width: 0; }
+    .rpe-label { font-size: 11px; font-weight: 600; color: var(--muted); }
+    .rpe-in { width: 2.3em; height: 30px; padding: 0 4px; text-align: center; font: inherit; font-size: 14px;
+      border: 1px solid var(--border); border-radius: 7px; background: var(--card); color: var(--text); }
+    .rpe-of { font-size: 11px; color: var(--muted); }
+    .set-actions.with-rpe { grid-template-columns: auto minmax(0, 1fr); }
     .rpe-hint { font-size: 12px; font-weight: 600; margin: 2px 0 4px; }
     .rpe-hint.rpe-up { color: hsl(135 45% 34%); }
     .rpe-hint.rpe-keep { color: var(--muted); }
@@ -1018,6 +1018,27 @@
       .goal-form .reps { grid-column: 1 / 3; }
       .set-actions { grid-template-columns: auto auto; justify-content: space-between; }
       .set-actions > * { width: auto; min-width: 96px; }
+    }
+      /* Tighter set area (Julius, 2026-11-06: chips and lines too far apart). */
+    .ex { align-content: start; }
+    .ex > .set-box { gap: 4px; margin-top: 4px; }
+    body.pick-view #today-sec .ex { align-content: start; }
+    .set-row { gap: 3px; }
+    .set-host:empty { display: none; }
+    /* RPE + Complete: stacked on very narrow cards, side by side otherwise. */
+    .set-box .set-actions.with-rpe { grid-template-columns: minmax(0, 1fr); }
+    @container (min-width: 150px) { .set-box .set-actions.with-rpe { grid-template-columns: auto minmax(0, 1fr); } }
+    .set-row .set-chip { min-width: 26px; padding: 0 6px; }
+    .goal-btn { padding: 0; }
+    .rpe-hint { margin: 0; }
+    /* Inline add form: reps | weight on one line, Append under them when narrow. */
+    .set-form.inline { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+    .set-form.inline .reps { grid-column: 1; grid-row: 1; }
+    .set-form.inline .weight { grid-column: 2; grid-row: 1; }
+    .set-box .set-form.inline .primary { grid-column: 1 / -1; grid-row: 2; }
+    @container (min-width: 230px) {
+      .set-form.inline { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) auto; }
+      .set-box .set-form.inline .primary { grid-column: 3; grid-row: 1; }
     }
   </style>
 </head>
@@ -1343,7 +1364,10 @@
     // Never redraw under a form he's typing in.
     function renderWhenIdle() {
       clearTimeout(idleTimer);
-      if (document.querySelector('.set-form')) { idleTimer = setTimeout(renderWhenIdle, 2000); return; }
+      const ae = document.activeElement;
+      const busy = document.querySelector('.set-form:not(.inline)') || (ae && ae.closest && ae.closest('.set-box'))
+        || [...document.querySelectorAll('.set-form.inline .reps')].some(i => i.value.trim());
+      if (busy) { idleTimer = setTimeout(renderWhenIdle, 2000); return; }
       render();
     }
 
@@ -1421,23 +1445,27 @@
       return el('div', 'rpe-hint rpe-' + (r <= 6 ? 'up' : r <= 8 ? 'keep' : 'down'), 'Last: RPE ' + r + ' · ' + tip);
     }
 
-    // 1–10 effort buttons for a session. Tap the chosen one again to clear.
-    function rpeRow(session) {
-      const row = el('div', 'rpe-row');
-      row.append(el('span', 'rpe-label', 'RPE'));
-      const btns = el('div', 'rpe-btns');
-      for (let n = 1; n <= 10; n++) {
-        const b = el('button', 'rpe-btn' + (session.rpe === n ? ' on' : ''), String(n));
-        b.type = 'button';
-        b.title = 'Effort ' + n + ' of 10';
-        b.addEventListener('click', () => {
-          const v = session.rpe === n ? 0 : n;
-          saveRPE(session.id, v, v ? 'RPE ' + v + ' saved' : 'RPE cleared');
-        });
-        btns.append(b);
-      }
-      row.append(btns);
-      return row;
+    // RPE as one number box, "RPE [7] /10" (Julius, 2026-11-06: no 10 buttons).
+    // Saves when the box loses focus or on Enter; blank clears it.
+    function rpeBox(session) {
+      const wrap = el('label', 'rpe-row');
+      const input = el('input', 'rpe-in');
+      input.inputMode = 'numeric';
+      input.enterKeyHint = 'done';
+      input.maxLength = 2;
+      input.value = session.rpe || '';
+      input.setAttribute('aria-label', 'RPE, 1 to 10');
+      const commit = () => {
+        const t = input.value.trim();
+        const n = Number(t);
+        if (t === '' ? !session.rpe : n === session.rpe) return;
+        if (t !== '' && !(/^\d+$/.test(t) && n >= 1 && n <= 10)) { setStatus('RPE must be 1 to 10'); input.value = session.rpe || ''; return; }
+        saveRPE(session.id, t === '' ? 0 : n, t === '' ? 'RPE cleared' : 'RPE ' + n + ' saved');
+      };
+      input.addEventListener('change', commit);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
+      wrap.append(el('span', 'rpe-label', 'RPE'), input, el('span', 'rpe-of', '/10'));
+      return wrap;
     }
 
     function saveComplete(sessionId, done, msg) {
@@ -1472,7 +1500,8 @@
       reps.value = opts.reps || '';
       // Adding: "Append" (10, 10 adds two sets). Changing a set: "Update".
       const saveLabel = opts.multi ? 'Append' : 'Update';
-      if (opts.multi) reps.placeholder = 'Reps (10, 10 = 2 sets)';
+      if (opts.multi) { reps.placeholder = 'Reps'; reps.title = '10, 10 = 2 sets'; }
+      if (opts.inline) { form.classList.add('inline'); weight.placeholder = 'Weight'; }
       const save = el('button', 'primary', saveLabel);
       save.type = 'submit';
       const cancel = el('button', 'x', '✕');
@@ -1487,7 +1516,7 @@
         del.addEventListener('click', () => { del.disabled = true; opts.onDelete(form, del); });
         form.append(del);
       }
-      form.append(cancel);
+      if (!opts.inline) form.append(cancel);
       const err = el('div', 'set-err');
       form.append(err);
       form.showError = text => { err.textContent = text; };
@@ -1599,21 +1628,20 @@
           row.append(setChip(ex, x, set, label, host));
         });
         box.append(row, host);
-        // Saved sets only (the server needs the session to exist).
-        if (x.sets.length && !x.sets.every(set => set.pending)) box.append(rpeRow(x));
       });
+      // RPE box for the latest session with saved sets (the server needs it to exist).
+      const rated = sessions.filter(x => x.sets.length && !x.sets.every(set => set.pending)).pop();
 
       // Same ID on a retry, so a save that half-worked can't count twice.
       const pending = { id: newId(), sessionId: open ? open.id : newId() };
       const lastSet = open && open.sets[open.sets.length - 1];
       const prefill = lastSet ? lastSet.weight : (ex.plan && ex.plan.weight) || lastWeight(ex);
-      const actions = el('div', 'set-actions');
-      const addHost = el('div', 'set-host');
-      const add = el('button', 'set-chip add', sessions.length && !open ? '+ New session' : '+ Add Set');
-      add.type = 'button';
-      add.addEventListener('click', () => openForm(addHost, {
+      const actions = el('div', 'set-actions' + (rated ? ' with-rpe' : ''));
+      // Reps box always there (Julius, 2026-11-06: no "+ Add Set" step).
+      const { form: addForm } = setForm({
         weight: prefill,
         multi: true,
+        inline: true,
         onSave: (list, weight) => {
           // One set per number; the first keeps the retry-safe pending ID.
           const ids = list.map((r, i) => i ? newId() : pending.id);
@@ -1623,8 +1651,9 @@
           showUndo((list.length > 1 ? list.length + ' sets saved: ' : 'Set saved: ') + list.join(', '),
             () => ids.slice().reverse().forEach(id => saveDelete(id, list.length > 1 ? 'Sets removed' : 'Set removed')));
         },
-      }));
-      actions.append(add);
+      });
+      box.append(addForm);
+      if (rated) actions.append(rpeBox(rated));
       if (!sessions.length || open) {
         const complete = el('button', 'set-complete', 'Complete');
         complete.type = 'button';
@@ -1643,7 +1672,7 @@
       } else {
         actions.append(el('span', 'set-done', '✓ Completed'));
       }
-      box.append(actions, addHost);
+      box.append(actions);
       return box;
     }
 
@@ -2731,10 +2760,11 @@
         if (ex.why && !isDoneToday(ex)) meta.append(el('span', 'tag later', 'Later · ' + ex.why));
       }
       if (showTags) meta.append(el('span', 'tag', ex.category), el('span', 'tag', areaGroup(ex)));
-      if (ex.freq) meta.append(el('span', 'tag', ex.freq));
       if (ex.plan) {
         const target = [ex.plan.target, ex.plan.weight].filter(Boolean).join(' @ ');
-        meta.append(el('span', 'tag', isDoneToday(ex) ? '✓ done' : (ex.plan.picked ? 'Picked' : 'Plan') + (target ? ': ' + target : '')));
+        // No "Picked" label (Julius, 2026-11-06); a Claude plan still shows its target.
+        if (isDoneToday(ex)) meta.append(el('span', 'tag', '✓ done'));
+        else if (!ex.plan.picked) meta.append(el('span', 'tag', 'Plan' + (target ? ': ' + target : '')));
         if (ex.plan.picked && !isDoneToday(ex)) {
           // Right column (under the days): → Next moves it to Up next, ✕ takes it off Today.
           const box = el('div', 'quick');

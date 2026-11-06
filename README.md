@@ -2,7 +2,7 @@
 
 Google Apps Script web app on top of the "Ex" Google Sheet (tab `V5: PT, Compound, Iso`). An easier UI than the sheet: what's been trained, what's falling behind, what to do today, and quick logging. The sheet stays the source of truth. Every push to `main` deploys automatically. Deeper technical notes live in `CLAUDE.md`.
 
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 
 ## Status key
 
@@ -65,8 +65,13 @@ Last updated: 2026-11-05
 **Boxed Today cards (2026-11-05)**
 - Every card in Today has a full rounded border in its freshness color, with a light tint inside: green = falling behind (do this one), yellow = ready, red = just done / resting. Same colors as the grid dots, in Simple and Full.
 
+**Simpler logging cards (2026-11-06)**
+- The reps box is always there: type `10` or `10, 10` and tap **Append** (or Enter). No more "+ Add Set" step.
+- RPE is one small box, **RPE [ ] /10**: type a number, it saves when you tap away or hit Enter. Blank clears it. It shows once you've saved a set.
+- Tighter cards: set chips closer together, no big gap above "Set goal", and the "Picked" and "2–3×/wk" labels are gone (This wk already shows it).
+
 **RPE: how hard it felt (2026-11-05)**
-- After you add a set, an **RPE 1–10** row shows under the sets. Tap how hard the exercise felt (once per session). Tap the same number again to clear it.
+- Rate the exercise 1–10 once per session (see the RPE box above).
 - Next time, the card shows a tip from last time's RPE: **1–6** "easy · go up (weight or reps)" (green), **7–8** "keep the same", **9–10** "hard · hold or drop a bit" (orange).
 - Saved in a new **RPE** column at the end of the app's `Sets` tab. The V5 tab doesn't change.
 
@@ -97,7 +102,7 @@ Last updated: 2026-11-05
 - The hide button moved to the top left, next to ↻: **▴** hides all the grids, **▸** brings them back. Remembered on the device.
 
 **Set-by-set logging (2026-11-02)**
-- **+ Add Set** saves one set at a time and replaces the Log box. Weight stays prefilled, and sets show on the card as 20, 15, 15.
+- The reps box saves one set at a time (or several with commas) and replaces the Log box. Weight stays prefilled, and sets show on the card as 20, 15, 15.
 - Tap a set to change or delete it. **Undo** appears for about 8 seconds after a save, change, delete or Complete.
 - Optional rep goal per exercise, with progress like 35 / 50 reps. You can go over it, and only **Complete** finishes the exercise.
 - The first set counts for recovery and the weekly boxes. Deleting every set in a session takes that back.
