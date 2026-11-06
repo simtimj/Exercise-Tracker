@@ -1040,6 +1040,16 @@
       .set-form.inline { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) auto; }
       .set-box .set-form.inline .primary { grid-column: 3; grid-row: 1; }
     }
+      /* Each category in its own light box (Julius, 2026-11-06: too much runs together). */
+    .grid-cat { border: 1px solid var(--border); border-radius: 10px; padding: 5px 6px 6px; background: var(--card); }
+    .grid-pair { column-gap: 6px; }
+    .grid-cat + .grid-cat, .grid-pair + .grid-cat, .grid-pair + .pt-detail + .grid-cat { margin-top: 6px; }
+    .grid-pair .pt-groups { grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); column-gap: 5px; }
+    .grid-pair .gx-name { flex-basis: 4.6em; }
+    .grid-pair .pt-grp.labeled .pt-grp-name { letter-spacing: 0; }
+    .grid-pair .pt-grp.labeled .pt-grp-head { gap: 3px; }
+    @media (max-width: 370px) { .grid-pair .pt-grp.labeled .pt-grp-name { font-size: 9.5px; } }
+    .grid-cat .grid-fold { margin-left: -4px; }
   </style>
 </head>
 

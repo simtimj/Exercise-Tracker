@@ -65,6 +65,9 @@ Last updated: 2026-11-06
 **Boxed Today cards (2026-11-05)**
 - Every card in Today has a full rounded border in its freshness color, with a light tint inside: green = falling behind (do this one), yellow = ready, red = just done / resting. Same colors as the grid dots, in Simple and Full.
 
+**Boxed grid categories (2026-11-06)**
+- PT, Compound and Isolation each sit in their own light rounded box, so the three are easy to tell apart.
+
 **Simpler logging cards (2026-11-06)**
 - The reps box is always there: type `10` or `10, 10` and tap **Append** (or Enter). No more "+ Add Set" step.
 - RPE is one small box, **RPE [ ] /10**: type a number, it saves when you tap away or hit Enter. Blank clears it. It shows once you've saved a set.
