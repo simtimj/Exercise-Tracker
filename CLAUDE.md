@@ -141,6 +141,11 @@ Goal: the app suggests what to do today based on which body areas are rested, so
 - The old "Longest since" chip line and `jumpToArea()` were removed (the area subheads show it).
 - **Nested tree (2026-10-25, Julius):** Suggested (full and Pick view) renders via `appendSuggestTree()` as category → area → exercises: `PT — do these first · 3 / 18 this week` (areas from `ptGroups`, each `Legs · 31 days since · 0 / 6 this week`), then `Compound` and `Isolation`, each with the `blocks` areas (longest since first) holding that category's pick. Category headings are small uppercase `.cat-head` lines; area groups are indented 12px with a 2px left rule (`.section.suggest .grp`). Area subheads come from `areaSub()`; the old numbered `1. Arms` blocks, the PT lead line and the "Then, by area" line are gone. Row meta (`pickMeta()`) no longer repeats the category: `Glute Med · 33 days since`.
 
+## Cooldown = days since, no weekly reset (2026-11-07, Julius)
+
+- Recovery was already days-based (`areaStatus()` / `realDaysBeforeToday()`); the weekly part was `ptOpen` dropping met PT. Now `suggestedExercises()` keeps met PT (`ptMet`, tagged `why: 'goal met this week'`, `ptMet: true`) at the bottom of its `ptGroups` group (not in `sug.pt`, so the This week "owed" text is unchanged); `g.ready` ignores met items.
+- `blocks` walks ready areas then resting ones, both `bySince` (longest since first), so when everything is resting Compound / Isolation still show the longest-untouched areas (`areaSub()` adds `resting until …`). `resting` is sorted soonest-ready first.
+
 ## Layout + calmer colors (2026-10-25, Julius: "too much color, it blurs together")
 
 - Category/Days order: **Today** (always shown; empty state "Nothing planned yet…") → **Suggested** → **Up next** (only if any) → an `All exercises` divider (`.zone`) → the category sections. Today and Suggested have dark headers (contrast, not color) so the pinned zones stand apart; gap between sections is 18px.

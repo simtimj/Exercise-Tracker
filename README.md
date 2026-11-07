@@ -2,7 +2,7 @@
 
 Google Apps Script web app on top of the "Ex" Google Sheet (tab `V5: PT, Compound, Iso`). An easier UI than the sheet: what's been trained, what's falling behind, what to do today, and quick logging. The sheet stays the source of truth. Every push to `main` deploys automatically. Deeper technical notes live in `CLAUDE.md`.
 
-Last updated: 2026-11-06
+Last updated: 2026-11-07
 
 ## Status key
 
@@ -129,6 +129,11 @@ Last updated: 2026-11-06
 - **In Today marker on the grid cells**: an exercise loaded into Today (not done yet) shows its next session box in light purple with a purple ring, and its short name turns purple — Today's color, separate from the red/yellow/green freshness colors. Added to the color key as "in Today".
 
 - **Up next marker on the grid cells (2026-10-27)**: an exercise in Up next shows its next session box in a lighter purple, with no ring, and its short name in light purple. Today keeps the darker purple box with the brighter ring, so the ring is the difference. Added to the color key as "up next".
+
+**Cooldown by days since, not by week (2026-11-07)**
+- Rest is always counted from the last time you trained that area (Legs 3 days, Glutes/Hips 2…), straight across Mondays; nothing resets weekly.
+- PT that already hit its weekly goal no longer disappears from Suggested; it stays at the bottom of its group (`goal met this week`), still ordered by days since.
+- If every area is resting, Compound / Isolation still show picks: the areas you trained longest ago first, marked `resting until …`. The Resting line lists the soonest-ready area first.
 
 ## 🔧 To be improved
 

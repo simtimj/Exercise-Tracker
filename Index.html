@@ -1878,6 +1878,9 @@
       // when its area is ready and it wasn't done yesterday (PT rest day).
       const ptOpen = all.filter(ex => ex.category === 'PT' && !inPlan.has(ex.key)
         && ex.weekDone - ex.slots.filter(slotToday).length < ex.weekTarget);
+      // Met this week: not dropped (no weekly reset, Julius 2026-11-07) — kept
+      // at the bottom of its PT group, still ranked by days since.
+      const ptMet = all.filter(ex => ex.category === 'PT' && !inPlan.has(ex.key) && !ptOpen.includes(ex));
       const restDay = ex => ex.slots.some(s => !s.noDate && s.days === 1);
       const ptOk = ex => ready(ex) && !restDay(ex);
 
@@ -1893,8 +1896,12 @@
         }));
 
       // Secondary: Compound + Isolation by body area, longest since first.
-      const readyAreas = Object.values(areas).filter(a => a.ready)
-        .sort((a, b) => effectiveDays(b.since) - effectiveDays(a.since) || a.name.localeCompare(b.name));
+      // Ready areas lead; if fewer than SUGGEST_AREAS are ready (or none),
+      // resting areas fill in, still longest since first (Julius 2026-11-07:
+      // "if they're all cooling down, which did I touch longest ago?").
+      const bySince = (a, b) => effectiveDays(b.since) - effectiveDays(a.since) || a.name.localeCompare(b.name);
+      const readyAreas = Object.values(areas).filter(a => a.ready).sort(bySince)
+        .concat(Object.values(areas).filter(a => !a.ready).sort(bySince));
       const blocks = [];
       for (const a of readyAreas) {
         if (blocks.length >= SUGGEST_AREAS) break;
@@ -1909,7 +1916,8 @@
       // group and spread the rest across days. Groups with a rested item
       // lead, then most days since the area was trained.
       const ptGroups = [];
-      pt.forEach(ex => {
+      const metTagged = ptMet.sort(byNeglect).map(ex => Object.assign(tag(ex), { why: 'goal met this week', ptMet: true }));
+      pt.concat(metTagged).forEach(ex => {
         let g = ptGroups.find(x => x.area.name === ex.area);
         if (!g) ptGroups.push(g = { area: areas[ex.area], items: [] });
         g.items.push(ex);
@@ -1922,8 +1930,8 @@
         total: list.reduce((n, ex) => n + ex.weekTarget, 0),
       });
       ptGroups.forEach(g => {
-        g.items = doneLast(g.items);
-        g.ready = g.items.some(ptOk);
+        g.items = doneLast(g.items.filter(ex => !ex.ptMet)).concat(g.items.filter(ex => ex.ptMet));
+        g.ready = g.items.some(ex => !ex.ptMet && ptOk(ex));
         g.week = sessions(ptAll.filter(ex => ex.area === g.area.name));
       });
       // Group order: the group holding the least recently touched exercise.
@@ -1934,7 +1942,8 @@
         ptGroups,
         ptWeek: sessions(ptAll),
         blocks,
-        resting: Object.values(areas).filter(a => !a.ready),
+        // Soonest ready first.
+        resting: Object.values(areas).filter(a => !a.ready).sort((a, b) => (a.days - a.since) - (b.days - b.since) || bySince(a, b)),
         unmapped: [...new Set(all.filter(ex => ex.area === 'Other').map(ex => ex.group))],
       };
     }
