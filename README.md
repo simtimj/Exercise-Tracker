@@ -2,7 +2,7 @@
 
 Google Apps Script web app on top of the "Ex" Google Sheet (tab `V5: PT, Compound, Iso`). An easier UI than the sheet: what's been trained, what's falling behind, what to do today, and quick logging. The sheet stays the source of truth. Every push to `main` deploys automatically. Deeper technical notes live in `CLAUDE.md`.
 
-Last updated: 2026-11-07
+Last updated: 2026-11-13
 
 ## Status key
 
@@ -56,6 +56,12 @@ Last updated: 2026-11-07
 - This week summary: plain-English suggestions (PT owed, areas untouched 7+ days, lopsided week).
 
 ## 🧪 To be confirmed (shipped 2026-10-26)
+
+**McGill Big Three (2026-11-13)**
+- New **Big Three** category, separate from PT: McGill Curl-Up, McGill Side Plank (knees bent), McGill Bird Dog. Goal 3×/wk to start (3–5 days/wk).
+- Takes one small box at the top of the grids: a `Big 3 · McGill` total line, then the three side by side. Tap it for the panel with + Today / + Next and a how-to cue for each.
+- Logging: the weight box becomes **Hold s** (type `10` → `10s`) and reps are per side, so the sheet reads e.g. `10s: 3, 3`.
+- Bird Dog moved out of PT into Big Three; its history and logs are kept. PT now has 8 exercises.
 
 - **Instant set saves (2026-11-04)** — a set shows right away, dimmed until it's saved; saving keeps going in the background and you can log the next set straight away. If a save fails, the status line says `Not saved: …`. Status shows how long the save took, e.g. `Set saved · 1.3s`.
 

@@ -67,6 +67,12 @@ Standalone Google Apps Script web app on top of Julius's "Ex" Google Sheet. Goal
 - Columns D–F — set logs as free text, e.g. `25lbs, 30, 25` or `20lbx2,   18…`.
 - The sheet already has conditional formatting; the app should do its own color coding rather than read sheet colors.
 
+## Big Three (2026-11-13, Julius)
+
+- Category `Big Three` (`BIG3`): `categoryOf(section, name)` → any row whose column C starts with `McGill`, or a section label mentioning Big Three / McGill. Bird Dog rows 25–27 were renamed in place to `McGill Bird Dog 3-5x a wk` (rows not moved, so Sets / history / picks keep their row numbers; the Sets tab's Exercise column was renamed to match). Curl-Up (rows 55–57) and Side Plank (knees) (58–60) sit in a `McGill Big Three` section appended after Isolation (row 54 label). Column A = `Core` for all.
+- Grid: `GRID_CATS` starts with `BIG3`; rendered first, full width, as one `.big3-row` (exLines side by side, McGill order via `big3Rank()`), tap → `gridOpen = '*'` panel with `BIG3_HOW` cues + `BIG3_NOTE`. Not in Suggested or the PT counts.
+- Holds: `setForm({ hold })` for `isHold(ex)`: weight box = hold time (`tidyHold`, `10` → `10s`), reps = per side. No schema change.
+
 ## Set-by-set logging (2026-11-02, Julius)
 
 - Replaced the Log box. `setBox()` in `Index.html`: goal + progress, set chips (tap to edit/delete), + Add Set, Complete, Undo bar (8s). One shared card, so every view gets it. Instant saves (2026-11-04, Julius: saves felt slow): the set shows at once as a dimmed `.pending` chip; `queueSave()` sends writes one at a time, in order, retries once on a network-type error; the server's `sheetWrite()` returns only `true`, then one `getTrackerData()` runs when the queue is empty (`refreshAfterSaves()`, dropped if a newer save started; `renderWhenIdle()` waits while a `.set-form` is open). A failed save shows `Not saved: …` in the status and the refresh removes the chip. Goals and date-only finishes still use `setCall()` (wait for the server). Status shows the round trip, e.g. `Set saved · 1.3s`.

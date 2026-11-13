@@ -1050,6 +1050,12 @@
     .grid-pair .pt-grp.labeled .pt-grp-head { gap: 3px; }
     @media (max-width: 370px) { .grid-pair .pt-grp.labeled .pt-grp-name { font-size: 9.5px; } }
     .grid-cat .grid-fold { margin-left: -4px; }
+    /* Big Three (Julius, 2026-11-13): its own category, one compact row on top —
+       the three exercises side by side under the total line. */
+    .pt-grp.big3-row { width: calc(100% + 8px); margin-top: 3px; font-size: 11px; color: var(--muted); }
+    .big3-row .gx-list { display: flex; flex-wrap: wrap; gap: 3px 14px; }
+    .big3-row .gx-name { flex: 0 0 auto; }
+    .grid-cat.big3 + .grid-pair, .grid-cat.big3 + .grid-cat, .grid-cat.big3 + .pt-detail + .grid-pair { margin-top: 6px; }
   </style>
 </head>
 
@@ -1210,9 +1216,15 @@
       return node;
     }
 
-    // Three top categories; the sheet's Abs section lives under Isolation.
-    function categoryOf(section) {
+    // Top categories; the sheet's Abs section lives under Isolation.
+    // Big Three (2026-11-13, Julius): McGill curl-up, side plank, bird dog. Any
+    // row named "McGill …" counts, wherever it sits (the Bird Dog rows stay in
+    // the PT block so their row numbers, logs and Sets history don't move).
+    const BIG3 = 'Big Three';
+    const isBig3Name = name => /^mcgill\b/i.test(String(name || '').trim());
+    function categoryOf(section, name) {
       const s = String(section || '');
+      if (isBig3Name(name) || /big three|mcgill/i.test(s)) return BIG3;
       if (/^pt\b/i.test(s)) return 'PT';
       if (/compound/i.test(s)) return 'Compound';
       if (/abs|isolation/i.test(s)) return 'Isolation';
@@ -1226,7 +1238,7 @@
         all.push(Object.assign({ group: g.name, area: g.area || 'Other', recoveryDays: g.recoveryDays }, ex, {
           days: effectiveDays(ex.daysSince),
           noDate: ex.daysSince == null,
-          category: categoryOf(ex.section),
+          category: categoryOf(ex.section, ex.name),
         }))));
       return all.sort((a, b) => a.row - b.row);
     }
@@ -1289,6 +1301,10 @@
     const newId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
       : Date.now().toString(36) + Math.random().toString(36).slice(2));
     const tidyWeight = w => { w = String(w || '').trim(); return /^\d+(\.\d+)?$/.test(w) ? w + 'lbs' : w; };
+    // Big Three: the weight box holds the hold time and reps are per side, so
+    // "10" → "10s" and the sheet reads "10s: 3, 3" (no schema change).
+    const tidyHold = w => { w = String(w || '').trim(); return /^\d+(\.\d+)?$/.test(w) ? w + 's' : w; };
+    const isHold = ex => ex.category === BIG3;
     const validReps = v => /^\d+$/.test(String(v).trim()) && Number(v) > 0;
     // "10, 10, 10" (or spaces / slashes) → [10, 10, 10]: one set per number (Julius, 2026-11-05).
     const repsList = v => {
@@ -1501,17 +1517,18 @@
     function setForm(opts) {
       const form = el('form', 'set-form');
       const weight = el('input', 'weight');
-      weight.placeholder = 'Weight / band';
+      weight.placeholder = opts.hold ? 'Hold (s)' : 'Weight / band';
       weight.value = opts.weight || '';
       const reps = el('input', 'reps');
       reps.placeholder = 'Reps';
+      if (opts.hold) reps.title = 'Reps per side';
       reps.inputMode = 'numeric';
       reps.enterKeyHint = 'done';
       reps.value = opts.reps || '';
       // Adding: "Append" (10, 10 adds two sets). Changing a set: "Update".
       const saveLabel = opts.multi ? 'Append' : 'Update';
-      if (opts.multi) { reps.placeholder = 'Reps'; reps.title = '10, 10 = 2 sets'; }
-      if (opts.inline) { form.classList.add('inline'); weight.placeholder = 'Weight'; }
+      if (opts.multi) { reps.placeholder = 'Reps'; reps.title = opts.hold ? 'Reps per side · 3, 3 = 2 sets' : '10, 10 = 2 sets'; }
+      if (opts.inline) { form.classList.add('inline'); weight.placeholder = opts.hold ? 'Hold s' : 'Weight'; }
       const save = el('button', 'primary', saveLabel);
       save.type = 'submit';
       const cancel = el('button', 'x', '✕');
@@ -1539,7 +1556,7 @@
         err.textContent = '';
         save.disabled = true;
         save.textContent = '…';
-        opts.onSave(opts.multi ? list : list[0], tidyWeight(weight.value), text => {
+        opts.onSave(opts.multi ? list : list[0], (opts.hold ? tidyHold : tidyWeight)(weight.value), text => {
           save.disabled = false;
           save.textContent = saveLabel;
           err.textContent = text;
@@ -1562,6 +1579,7 @@
       chip.addEventListener('click', () => openForm(host, {
         reps: set.reps,
         weight: set.weight,
+        hold: isHold(ex),
         onSave: (reps, weight) => {
           const before = { reps: set.reps, weight: set.weight };
           saveEdit(set.id, reps, weight, 'Set updated');
@@ -1652,6 +1670,7 @@
         weight: prefill,
         multi: true,
         inline: true,
+        hold: isHold(ex),
         onSave: (list, weight) => {
           // One set per number; the first keeps the retry-safe pending ID.
           const ids = list.map((r, i) => i ? newId() : pending.id);
@@ -2808,12 +2827,13 @@
     // Groups are laid out by body part: names in `order` sit two per row,
     // names in `solo` get a row to themselves. Unknown groups go last.
     const GRID_LAYOUT = {
+      [BIG3]: { order: [], solo: [] },
       PT: { order: ['Core', 'Glute Max', 'Glute Med', 'Hamstrings', 'Quads'], solo: ['Core'] },
       Compound: { order: ['Lats', 'Upper Back', 'Chest', 'Shoulders', 'Quads'], solo: ['Quads'] },
       Isolation: { order: ['Upper Abs', 'Middle Abs', 'Lower Abs', 'Obliques', 'Biceps', 'Triceps',
         'Shoulders', 'Rear Delts', 'Upper Back', 'Calves'], solo: [] },
     };
-    const GRID_CATS = ['PT', 'Compound', 'Isolation'];
+    const GRID_CATS = [BIG3, 'PT', 'Compound', 'Isolation'];
     let gridCat = 'PT';
     try { gridCat = localStorage.getItem('gridCat') || 'PT'; } catch (e) {}
     if (!GRID_CATS.includes(gridCat)) gridCat = 'PT';
@@ -2868,6 +2888,7 @@
     const SHORT_NAMES = [
       [/glute bridge/i, 'Bridge'], [/romanian|\brdl\b/i, 'RDL'], [/bulgarian/i, 'BSS'],
       [/step ?ups?/i, 'Step up'], [/side ?lying/i, 'Hip abd'], [/band walk/i, 'Band wk'],
+      [/mcgill curl|curl-?up/i, 'Curl-up'], [/mcgill side plank/i, 'Side plk'],
       [/clam/i, 'Clams'], [/dead ?bug/i, 'Dead bug'], [/bird ?dog/i, 'Bird dog'],
       [/pull ?ups?/i, 'Pull up'], [/incline/i, 'Incline'], [/bench press/i, 'Bench'],
       [/one-?arm/i, '1-arm'], [/barbell row/i, 'Row'], [/overhead press/i, 'OHP'],
@@ -2928,6 +2949,17 @@
       return bar;
     }
 
+    // McGill Big Three cues, shown in the grid's tap panel (Julius, 2026-11-13).
+    const BIG3_HOW = [
+      [/curl/i, 'One knee bent, other leg straight, hands under the low back curve. Brace, lift head and shoulders slightly. Low back stays neutral; no crunching.'],
+      [/side plank/i, 'On forearm and bent knees, elbow under shoulder. Lift hips so head to knees is one straight line. Both sides.'],
+      [/bird ?dog/i, 'Hands and knees. Reach opposite arm and leg, spine neutral, hips level. Don\'t lift the leg too high.'],
+    ];
+    const BIG3_NOTE = 'Start: 3 reps (per side), 5–10s holds, 3–5 days/wk. Build up slowly; stop or modify if symptoms get worse.';
+    const big3How = name => (BIG3_HOW.find(([re]) => re.test(name)) || [])[1] || '';
+    // McGill order: curl-up, side plank, bird dog.
+    const big3Rank = ex => { const i = BIG3_HOW.findIndex(([re]) => re.test(ex.name)); return i < 0 ? 9 : i; };
+
     // Details panel under the grid: one group, or the whole category ('*').
     function gridDetail(cat, groups) {
       const box = el('div', 'pt-detail');
@@ -2957,6 +2989,11 @@
         if (!ex.met && !isDoneToday(ex)) r.append(quickAdd(ex, true));
         return r;
       };
+      const add = ex => {
+        box.append(line(ex));
+        const how = cat === BIG3 && big3How(ex.name);
+        if (how) box.append(el('div', 'pt-detail-why', how));
+      };
       shown.forEach(g => {
         const gs = sessOf(g.list);
         const gf = groupFresh(g.list);
@@ -2965,15 +3002,16 @@
           sub.append(freshDot(gf), document.createTextNode(g.name + ' · ' + gs.done + '/' + gs.total + ' · ' + gf.label));
           box.append(sub);
           // What's left first, then what's done.
-          g.list.filter(ex => !ex.met).concat(g.list.filter(ex => ex.met)).forEach(ex => box.append(line(ex)));
+          g.list.filter(ex => !ex.met).concat(g.list.filter(ex => ex.met)).forEach(add);
         } else {
           const left = g.list.filter(ex => !ex.met);
           const met = g.list.filter(ex => ex.met);
-          if (left.length) { box.append(el('div', 'pt-detail-sub', 'Left')); left.forEach(ex => box.append(line(ex))); }
-          if (met.length) { box.append(el('div', 'pt-detail-sub', 'Done')); met.forEach(ex => box.append(line(ex))); }
+          if (left.length) { box.append(el('div', 'pt-detail-sub', 'Left')); left.forEach(add); }
+          if (met.length) { box.append(el('div', 'pt-detail-sub', 'Done')); met.forEach(add); }
           if (cat === 'PT' && PT_WHY[g.name]) box.append(el('div', 'pt-detail-why', PT_WHY[g.name]));
         }
       });
+      if (cat === BIG3) box.append(el('div', 'pt-detail-why', BIG3_NOTE));
       return box;
     }
 
@@ -2981,13 +3019,13 @@
       const strip = document.getElementById('pt-strip');
       strip.innerHTML = '';
       const byCat = Object.fromEntries(GRID_CATS.map(c => [c, (sections.find(x => x.name === c) || { exercises: [] }).exercises]));
-      if (!byCat.PT.length && !byCat.Compound.length && !byCat.Isolation.length) return;
+      if (GRID_CATS.every(c => !byCat[c].length)) return;
 
       if (gridMin) { gridOpen = null; return; }
 
       // "Done last" (Julius, 2026-11-05): exercises from the last RECENT_DAYS
       // training days, even once they've cooled down — do other things first.
-      const all = [].concat(byCat.PT, byCat.Compound, byCat.Isolation);
+      const all = [].concat(...GRID_CATS.map(c => byCat[c]));
       const lastDays = [...new Set(all.filter(ex => !ex.noDate).map(ex => ex.days))].sort((a, b) => a - b).slice(0, RECENT_DAYS);
       recentKeys = new Set(all.filter(ex => !ex.noDate && lastDays.includes(ex.days)).map(ex => ex.key));
 
@@ -2998,8 +3036,9 @@
       GRID_CATS.forEach(cat => {
         const list = byCat[cat];
         if (!list.length) return;
-        const half = pairOn && cat !== 'Isolation';
-        const sec = el('div', 'grid-cat');
+        const half = pairOn && (cat === 'PT' || cat === 'Compound');
+        const big3 = cat === BIG3;
+        const sec = el('div', 'grid-cat' + (big3 ? ' big3' : ''));
         blocks[cat] = { sec, detail: null };
         const metAll = list.every(ex => ex.met);
         const t = sessOf(list);
@@ -3023,7 +3062,7 @@
         line.title = folded ? 'Expand ' + cat : 'Show all ' + cat;
         const bar = segBar(list.map(ex => Math.min(1, ex.weekDone / ex.weekTarget)), metAll ? 'all' : '');
         const count = el('span', 'pt-count', metAll ? (half ? '✓' : 'all done ✓') : t.done + '/' + t.total + (half ? '' : ' done'));
-        line.append(el('span', 'pt-label', half ? cat : cat + ' this week'), bar, count);
+        line.append(el('span', 'pt-label', half ? cat : big3 ? 'Big 3 · McGill' : cat + ' this week'), bar, count);
         line.addEventListener('click', () => {
           if (folded) { toggleFold(cat); return; }
           gridOpen = isOpenCat && gridOpen === '*' ? null : '*';
@@ -3033,6 +3072,27 @@
         head.append(fold, line);
         sec.append(head);
         if (folded) return;
+
+        // Big Three: one compact row, the three exercises side by side; tap it
+        // for the panel with the how-to cues (Julius, 2026-11-13: little room).
+        if (big3) {
+          const ordered = list.slice().sort((x, y) => big3Rank(x) - big3Rank(y));
+          const groups = [{ name: 'Big Three', solo: true, list: ordered }];
+          let f = groupFresh(list);
+          if (f.cls !== 'f-red' && list.some(ex => recentKeys.has(ex.key))) f = Object.assign({}, f, { cls: 'f-last', label: 'done last · do others first' });
+          const row = el('button', 'pt-grp big3-row ' + f.cls + (metAll ? ' met' : '') + (isOpenCat && gridOpen === '*' ? ' open' : ''));
+          row.type = 'button';
+          row.title = 'McGill Big Three · ' + f.label;
+          row.append(exLines(ordered));
+          row.addEventListener('click', () => {
+            gridOpen = isOpenCat && gridOpen === '*' ? null : '*';
+            gridCat = cat;
+            render();
+          });
+          sec.append(row);
+          if (isOpenCat && gridOpen) { blocks[cat].detail = gridDetail(cat, groups); openShown = true; }
+          return;
+        }
 
         // Muscle group grid — tap a group for what's left and what's done.
         const groups = gridGroups(cat, list);
@@ -3066,6 +3126,11 @@
           openShown = true;
         }
       });
+      // Big Three on top, full width, one compact row.
+      if (blocks[BIG3]) {
+        strip.append(blocks[BIG3].sec);
+        if (blocks[BIG3].detail) strip.append(blocks[BIG3].detail);
+      }
       // Panels open full width under their row.
       if (pairOn) {
         const pair = el('div', 'grid-pair');
@@ -3075,7 +3140,7 @@
       }
       GRID_CATS.forEach(cat => {
         const b = blocks[cat];
-        if (!b || (pairOn && cat !== 'Isolation')) return;
+        if (!b || cat === BIG3 || (pairOn && (cat === 'PT' || cat === 'Compound'))) return;
         strip.append(b.sec);
         if (b.detail) strip.append(b.detail);
       });
